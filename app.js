@@ -28,17 +28,32 @@ app.get("/api/current-period", (req, res) => {
 });
 
 app.post("/api/generate", async (req, res) => {
-  const { county, state, propertySubType } = req.body;
+  const { county, state, propertySubType, agentName, agentEmail, agentWebsite } = req.body;
   if (!county || !state || !propertySubType) {
     return res.status(400).json({ error: "Missing required fields." });
   }
 
   const { month, year } = lastCompletedMonth();
 
+  // Stream status updates back to the client as each step completes
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+
   try {
+    send("status", { message: "Fetching live market data…" });
     const data = await fetchMarketReport({ county, state, month, year, propertySubType });
+
+    send("status", { message: "Writing the market analysis…" });
     const analysis = await analyzeMarket(data);
-    const html = generateReport(data, analysis);
+
+    send("status", { message: "Building your report…" });
+    const agentOverride = (agentName || agentEmail || agentWebsite)
+      ? { name: agentName, email: agentEmail, website: agentWebsite }
+      : null;
+    const html = generateReport(data, analysis, agentOverride);
 
     const pad = n => String(n).padStart(2, "0");
     const filename = `${county.replace(/\s+/g, "-")}-${pad(month)}-${year}.html`;
@@ -46,10 +61,12 @@ app.post("/api/generate", async (req, res) => {
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, filename), html, "utf-8");
 
-    res.json({ success: true, filename, month, year });
+    send("done", { filename, month, year });
   } catch (err) {
     console.error("Generation error:", err);
-    res.status(500).json({ error: err.message });
+    send("error", { message: err.message });
+  } finally {
+    res.end();
   }
 });
 

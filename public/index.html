@@ -147,6 +147,33 @@
       cursor: not-allowed;
     }
 
+    input[type="text"], input[type="email"] {
+      width: 100%;
+      padding: 11px 14px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: white;
+      transition: border-color 0.15s;
+    }
+
+    input[type="text"]:focus, input[type="email"]:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(26,74,58,0.1);
+    }
+
+    .agent-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
     /* ── Button ── */
     .btn {
       width: 100%;
@@ -321,6 +348,25 @@
     </select>
   </div>
 
+  <div class="divider"></div>
+
+  <div class="agent-label">Your Information</div>
+
+  <div class="form-group">
+    <label for="agent-name">Your Name</label>
+    <input type="text" id="agent-name" placeholder="e.g. Jane Smith">
+  </div>
+
+  <div class="form-group">
+    <label for="agent-email">Your Email</label>
+    <input type="email" id="agent-email" placeholder="e.g. jane@randrealty.com">
+  </div>
+
+  <div class="form-group">
+    <label for="agent-website">Your Website</label>
+    <input type="text" id="agent-website" placeholder="e.g. jane.agent.randcenter.com">
+  </div>
+
   <button class="btn" id="generate-btn" disabled>
     <span id="btn-text">Generate Report</span>
   </button>
@@ -351,10 +397,13 @@
   const MONTH_NAMES = ["January","February","March","April","May","June",
     "July","August","September","October","November","December"];
 
-  const stateSelect  = document.getElementById("state-select");
-  const countySelect = document.getElementById("county-select");
-  const typeSelect   = document.getElementById("type-select");
-  const generateBtn  = document.getElementById("generate-btn");
+  const stateSelect   = document.getElementById("state-select");
+  const countySelect  = document.getElementById("county-select");
+  const typeSelect    = document.getElementById("type-select");
+  const agentName     = document.getElementById("agent-name");
+  const agentEmail    = document.getElementById("agent-email");
+  const agentWebsite  = document.getElementById("agent-website");
+  const generateBtn   = document.getElementById("generate-btn");
   const statusEl     = document.getElementById("status");
   const recentList   = document.getElementById("recent-list");
   const periodLabel  = document.getElementById("period-label");
@@ -396,6 +445,22 @@
   });
 
   // Generate
+  let timerInterval = null;
+
+  function startTimer(getMessageFn) {
+    clearInterval(timerInterval);
+    const startTime = Date.now();
+    timerInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startTime) / 1000);
+      statusEl.querySelector(".status-msg").textContent = `${getMessageFn()} (${elapsed}s)`;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerInterval);
+    timerInterval = null;
+  }
+
   generateBtn.addEventListener("click", async () => {
     const county = countySelect.value;
     const state  = stateSelect.value;
@@ -403,36 +468,69 @@
     if (!county || !state) return;
 
     generateBtn.disabled = true;
-    showStatus("loading", `Fetching live market data for ${county} County… this takes about 15 seconds.`);
+    let currentMessage = "Fetching live market data…";
+    showStatus("loading", currentMessage);
+    startTimer(() => currentMessage);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ county, state, propertySubType })
+        body: JSON.stringify({
+          county,
+          state,
+          propertySubType,
+          agentName: agentName.value.trim(),
+          agentEmail: agentEmail.value.trim(),
+          agentWebsite: agentWebsite.value.trim()
+        })
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Unknown error");
 
-      const { filename, month, year } = data;
-      const reportUrl = `/reports/${filename}`;
-      const label = `${county} County · ${MONTH_NAMES[month - 1]} ${year}`;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
 
-      showStatus("success", `Report ready: <a href="${reportUrl}" target="_blank">${label} — Open Report ↗</a>`);
-      addRecent(label, reportUrl);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop(); // keep incomplete line
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6));
+
+          if (event.type === "status") {
+            currentMessage = event.message;
+            showStatus("loading", currentMessage);
+            startTimer(() => currentMessage);
+          } else if (event.type === "done") {
+            stopTimer();
+            const { filename, month, year } = event;
+            const reportUrl = `/reports/${filename}`;
+            const label = `${county} County · ${MONTH_NAMES[month - 1]} ${year}`;
+            showStatus("success", `Report ready: <a href="${reportUrl}" target="_blank">${label} — Open Report ↗</a>`);
+            addRecent(label, reportUrl);
+          } else if (event.type === "error") {
+            throw new Error(event.message);
+          }
+        }
+      }
     } catch (err) {
+      stopTimer();
       showStatus("error", `Error: ${err.message}`);
     } finally {
       generateBtn.disabled = false;
     }
   });
 
-  function showStatus(type, html) {
+  function showStatus(type, message) {
     statusEl.className = `status ${type}`;
     if (type === "loading") {
-      statusEl.innerHTML = `<div class="spinner"></div><span>${html}</span>`;
+      statusEl.innerHTML = `<div class="spinner"></div><span class="status-msg">${message}</span>`;
     } else {
-      statusEl.innerHTML = `<span>${html}</span>`;
+      statusEl.innerHTML = `<span>${message}</span>`;
     }
   }
 

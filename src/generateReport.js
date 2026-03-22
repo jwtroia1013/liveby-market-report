@@ -154,7 +154,7 @@ function buildPage2Table(data) {
   return summaryRow + segmentRows;
 }
 
-export function generateReport(data, analysis = null) {
+export function generateReport(data, analysis = null, agentOverride = null) {
   const { county, state, month, year, propertySubType,
           currentPeriod, lastMonthPeriod, lastYearPeriod,
           ytdCount, lastMonthYtdCount, priorYtdCount, activeSnapshot, underContractCount,
@@ -162,7 +162,8 @@ export function generateReport(data, analysis = null) {
 
   const monthName = MONTH_NAMES[month - 1];
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence" : propertySubType;
-  const { agent, branding } = config;
+  const { branding } = config;
+  const agent = agentOverride || config.agent;
 
   const salesRows = [
     {
@@ -285,12 +286,17 @@ export function generateReport(data, analysis = null) {
   const page2Rows = buildPage2Table(data);
   const disclaimer = `Data sourced from ${config.mlsSources}. Information is deemed reliable but not guaranteed. Report generated ${monthName} ${year}.`;
 
+  const agentLines = [
+    agent.name ? `<strong>${agent.name}</strong>` : null,
+    [
+      agent.email ? `<a href="mailto:${agent.email}">${agent.email}</a>` : null,
+      agent.website ? `<a href="https://${agent.website}">${agent.website}</a>` : null
+    ].filter(Boolean).join(" &bull; ")
+  ].filter(Boolean).join("<br>");
+
   const footer = `
     <div class="footer">
-      <div class="footer-agent">
-        <strong>${agent.name}</strong><br>
-        <a href="mailto:${agent.email}">${agent.email}</a> &bull; <a href="https://${agent.website}">${agent.website}</a>
-      </div>
+      <div class="footer-agent">${agentLines}</div>
       <div class="footer-brand">
         <span class="brand-company">${branding.company}</span>
         <span class="brand-divider"> | </span>
