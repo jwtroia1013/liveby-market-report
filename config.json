@@ -12,6 +12,6 @@
     "accentColor": "#c8963e"
   },
   "mlsSources": "NJMLS-New Jersey MLS, and OneKey MLS",
-  "apiKey": "REDACTED_LIVEBY_KEY",
-  "anthropicApiKey": "ANTHROPIC_KEY_REMOVED"
+  "apiKey": "",
+  "anthropicApiKey": ""
 }
