@@ -1,0 +1,17 @@
+{
+  "agent": {
+    "name": "James Troia",
+    "email": "jamie.troia@randrealty.com",
+    "website": "jamietroia.agent.randcenter.com",
+    "photoUrl": ""
+  },
+  "branding": {
+    "company": "HOWARD HANNA",
+    "division": "RAND REALTY",
+    "primaryColor": "#1a4a3a",
+    "accentColor": "#c8963e"
+  },
+  "mlsSources": "NJMLS-New Jersey MLS, and OneKey MLS",
+  "apiKey": "REDACTED_LIVEBY_KEY",
+  "anthropicApiKey": "ANTHROPIC_KEY_REMOVED"
+}

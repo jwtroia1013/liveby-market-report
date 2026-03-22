@@ -1,0 +1,17 @@
+{
+  "name": "liveby-market-report",
+  "version": "1.0.0",
+  "description": "Howard Hanna Rand Realty market report generator using LiveBy API",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node app.js",
+    "cli": "node index.js",
+    "ui": "node app.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.80.0",
+    "express": "^5.2.1",
+    "node-fetch": "^3.3.2"
+  }
+}

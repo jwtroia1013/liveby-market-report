@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Market Report Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --green: #1a4a3a;
+      --green-light: #2d6b52;
+      --gold: #c8963e;
+      --bg: #f2f0ec;
+      --card-bg: #ffffff;
+      --border: #d8d4cc;
+      --text: #222;
+      --muted: #666;
+    }
+
+    body {
+      font-family: 'Source Sans 3', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 40px 20px 60px;
+      color: var(--text);
+    }
+
+    /* ── Header ── */
+    header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 8px;
+    }
+
+    .brand-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--green);
+      letter-spacing: 0.04em;
+    }
+
+    .brand-divider {
+      color: var(--gold);
+      font-size: 18px;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: 30px;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 6px;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--muted);
+      font-weight: 300;
+    }
+
+    /* ── Card ── */
+    .card {
+      background: var(--card-bg);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      padding: 36px 40px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+    }
+
+    .period-banner {
+      background: var(--green);
+      color: white;
+      border-radius: 4px;
+      padding: 10px 16px;
+      font-size: 14px;
+      margin-bottom: 28px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .period-banner strong {
+      font-size: 15px;
+    }
+
+    .period-banner .period-icon {
+      font-size: 18px;
+      opacity: 0.8;
+    }
+
+    /* ── Form ── */
+    .form-group {
+      margin-bottom: 22px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--green);
+      margin-bottom: 7px;
+    }
+
+    select {
+      width: 100%;
+      padding: 11px 14px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 15px;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: white;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%231a4a3a' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    select:focus {
+      outline: none;
+      border-color: var(--green);
+      box-shadow: 0 0 0 3px rgba(26,74,58,0.1);
+    }
+
+    select:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    /* ── Button ── */
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: var(--green);
+      color: white;
+      border: none;
+      border-radius: 4px;
+      font-family: 'Source Sans 3', sans-serif;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      transition: background 0.15s;
+      margin-top: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:hover:not(:disabled) {
+      background: var(--green-light);
+    }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* ── Status ── */
+    .status {
+      margin-top: 20px;
+      border-radius: 4px;
+      padding: 14px 16px;
+      font-size: 14px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .status.loading {
+      display: flex;
+      background: #eef5f1;
+      color: var(--green);
+      border: 1px solid #b8d4c4;
+    }
+
+    .status.success {
+      display: flex;
+      background: #eef5f1;
+      color: var(--green);
+      border: 1px solid #b8d4c4;
+    }
+
+    .status.error {
+      display: flex;
+      background: #fdf0f0;
+      color: #c0392b;
+      border: 1px solid #f0c0c0;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(26,74,58,0.2);
+      border-top-color: var(--green);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .status a {
+      color: var(--green);
+      font-weight: 700;
+      text-decoration: underline;
+    }
+
+    /* ── Divider ── */
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 24px 0;
+    }
+
+    /* ── Recent reports ── */
+    .recent-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 10px;
+    }
+
+    #recent-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    #recent-list li a {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--green);
+      text-decoration: none;
+      padding: 6px 10px;
+      border-radius: 3px;
+      transition: background 0.1s;
+    }
+
+    #recent-list li a:hover {
+      background: var(--bg);
+    }
+
+    #recent-list .report-icon { font-size: 15px; }
+    #recent-list .report-name { flex: 1; font-weight: 600; }
+    #recent-list .report-arrow { color: var(--gold); font-size: 12px; }
+
+    .empty-recent {
+      font-size: 13px;
+      color: var(--muted);
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="brand-name">HOWARD HANNA</span>
+    <span class="brand-divider">|</span>
+    <span class="brand-name">RAND REALTY</span>
+  </div>
+  <h1>Market Report Generator</h1>
+  <p class="subtitle">Generate branded PDF-ready market reports from live MLS data</p>
+</header>
+
+<div class="card">
+  <div class="period-banner">
+    <span class="period-icon">📅</span>
+    <span>Reporting period: <strong id="period-label">Loading...</strong></span>
+  </div>
+
+  <div class="form-group">
+    <label for="state-select">State</label>
+    <select id="state-select">
+      <option value="">— Select a state —</option>
+      <option value="New York">New York</option>
+      <option value="New Jersey">New Jersey</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="county-select">County</label>
+    <select id="county-select" disabled>
+      <option value="">— Select a state first —</option>
+    </select>
+  </div>
+
+  <div class="form-group">
+    <label for="type-select">Property Type</label>
+    <select id="type-select">
+      <option value="SingleFamilyResidence">Single Family Residence</option>
+      <option value="Condominium">Condominium</option>
+      <option value="Townhouse">Townhouse</option>
+    </select>
+  </div>
+
+  <button class="btn" id="generate-btn" disabled>
+    <span id="btn-text">Generate Report</span>
+  </button>
+
+  <div class="status" id="status"></div>
+
+  <div class="divider"></div>
+
+  <div class="recent-label">Recent Reports</div>
+  <ul id="recent-list">
+    <li><span class="empty-recent">No reports generated yet.</span></li>
+  </ul>
+</div>
+
+<script>
+  const COUNTIES = {
+    "New York": [
+      "Bronx", "Dutchess", "Orange", "Putnam", "Rockland",
+      "Sullivan", "Ulster", "Westchester"
+    ],
+    "New Jersey": [
+      "Bergen", "Essex", "Hudson", "Hunterdon", "Middlesex",
+      "Monmouth", "Morris", "Passaic", "Somerset", "Sussex",
+      "Union", "Warren"
+    ]
+  };
+
+  const MONTH_NAMES = ["January","February","March","April","May","June",
+    "July","August","September","October","November","December"];
+
+  const stateSelect  = document.getElementById("state-select");
+  const countySelect = document.getElementById("county-select");
+  const typeSelect   = document.getElementById("type-select");
+  const generateBtn  = document.getElementById("generate-btn");
+  const statusEl     = document.getElementById("status");
+  const recentList   = document.getElementById("recent-list");
+  const periodLabel  = document.getElementById("period-label");
+
+  let currentPeriod = null;
+  let recentReports = [];
+
+  // Load current period
+  fetch("/api/current-period")
+    .then(r => r.json())
+    .then(({ month, year }) => {
+      currentPeriod = { month, year };
+      periodLabel.textContent = `${MONTH_NAMES[month - 1]} ${year}`;
+    });
+
+  // State → county cascade
+  stateSelect.addEventListener("change", () => {
+    const state = stateSelect.value;
+    countySelect.innerHTML = "";
+    if (!state) {
+      countySelect.innerHTML = '<option value="">— Select a state first —</option>';
+      countySelect.disabled = true;
+      generateBtn.disabled = true;
+      return;
+    }
+    countySelect.innerHTML = '<option value="">— Select a county —</option>';
+    for (const county of COUNTIES[state]) {
+      const opt = document.createElement("option");
+      opt.value = county;
+      opt.textContent = county;
+      countySelect.appendChild(opt);
+    }
+    countySelect.disabled = false;
+    generateBtn.disabled = true;
+  });
+
+  countySelect.addEventListener("change", () => {
+    generateBtn.disabled = !countySelect.value;
+  });
+
+  // Generate
+  generateBtn.addEventListener("click", async () => {
+    const county = countySelect.value;
+    const state  = stateSelect.value;
+    const propertySubType = typeSelect.value;
+    if (!county || !state) return;
+
+    generateBtn.disabled = true;
+    showStatus("loading", `Fetching live market data for ${county} County… this takes about 15 seconds.`);
+
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ county, state, propertySubType })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Unknown error");
+
+      const { filename, month, year } = data;
+      const reportUrl = `/reports/${filename}`;
+      const label = `${county} County · ${MONTH_NAMES[month - 1]} ${year}`;
+
+      showStatus("success", `Report ready: <a href="${reportUrl}" target="_blank">${label} — Open Report ↗</a>`);
+      addRecent(label, reportUrl);
+    } catch (err) {
+      showStatus("error", `Error: ${err.message}`);
+    } finally {
+      generateBtn.disabled = false;
+    }
+  });
+
+  function showStatus(type, html) {
+    statusEl.className = `status ${type}`;
+    if (type === "loading") {
+      statusEl.innerHTML = `<div class="spinner"></div><span>${html}</span>`;
+    } else {
+      statusEl.innerHTML = `<span>${html}</span>`;
+    }
+  }
+
+  function addRecent(label, url) {
+    recentReports.unshift({ label, url });
+    if (recentReports.length > 5) recentReports.pop();
+    renderRecent();
+  }
+
+  function renderRecent() {
+    if (recentReports.length === 0) {
+      recentList.innerHTML = '<li><span class="empty-recent">No reports generated yet.</span></li>';
+      return;
+    }
+    recentList.innerHTML = recentReports.map(r => `
+      <li>
+        <a href="${r.url}" target="_blank">
+          <span class="report-icon">📄</span>
+          <span class="report-name">${r.label}</span>
+          <span class="report-arrow">↗</span>
+        </a>
+      </li>
+    `).join("");
+  }
+</script>
+
+</body>
+</html>
