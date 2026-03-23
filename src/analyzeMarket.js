@@ -81,7 +81,7 @@ Guidelines:
 - Use plain, conversational language. Avoid jargon.
 - Weave in the specific numbers above naturally — don't just list them.
 - Give the reader useful context for what the numbers mean (e.g., what a sale-to-list ratio above 100% signals, what low inventory means for buyers vs. sellers).
-- Reference broader regional or national housing market trends where relevant and accurate — you may use your knowledge of the housing market and perform web searches to find current, reliable context about the ${county} County / ${state} real estate market.
+- Reference broader regional or national housing market trends where relevant and accurate, drawing on your knowledge of the housing market.
 - Be honest but constructive. If it's a tough market for buyers, say so — but help them understand what they can do.
 - Do NOT use bullet points or headers. Pure flowing prose only.
 - Do NOT include a sign-off, byline, or salutation.
@@ -90,38 +90,12 @@ Guidelines:
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    tools: [{ type: "web_search_20250305", name: "web_search" }],
     messages: [{ role: "user", content: prompt }],
-  }, { timeout: 90000 });
+  }, { timeout: 60000 });
 
-  // Collect all text blocks from the response (may span tool use turns)
-  let analysis = "";
-  for (const block of response.content) {
-    if (block.type === "text") analysis += block.text;
-  }
-
-  // If tool use happened, make a follow-up to get the final text
-  if (response.stop_reason === "tool_use") {
-    const toolResults = response.content
-      .filter(b => b.type === "tool_use")
-      .map(b => ({ type: "tool_result", tool_use_id: b.id, content: "Search completed." }));
-
-    const followUp = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [
-        { role: "user", content: prompt },
-        { role: "assistant", content: response.content },
-        { role: "user", content: toolResults },
-      ],
-    }, { timeout: 90000 });
-
-    analysis = followUp.content
-      .filter(b => b.type === "text")
-      .map(b => b.text)
-      .join("\n\n");
-  }
-
-  return analysis.trim();
+  return response.content
+    .filter(b => b.type === "text")
+    .map(b => b.text)
+    .join("")
+    .trim();
 }

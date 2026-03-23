@@ -49,37 +49,21 @@ Guidelines:
 - Compare and contrast the regions — highlight which areas are stronger or weaker and why
 - Weave in the specific numbers naturally rather than listing them
 - Give context for what the inventory and price trends mean for buyers and sellers
-- You may reference broader regional or national housing market trends using your knowledge and web search
+- You may reference broader regional or national housing market trends using your knowledge
 - Pure flowing prose — no bullet points, no headers, no sign-off
 - Each paragraph should be 3–5 sentences`;
 
   const response = await client.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 1024,
-    tools: [{ type: "web_search_20250305", name: "web_search" }],
     messages: [{ role: "user", content: prompt }],
-  }, { timeout: 90000 });
+  }, { timeout: 60000 });
 
-  let analysis = response.content.filter(b => b.type === "text").map(b => b.text).join("");
-
-  if (response.stop_reason === "tool_use") {
-    const toolResults = response.content
-      .filter(b => b.type === "tool_use")
-      .map(b => ({ type: "tool_result", tool_use_id: b.id, content: "Search completed." }));
-    const followUp = await client.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1024,
-      tools: [{ type: "web_search_20250305", name: "web_search" }],
-      messages: [
-        { role: "user", content: prompt },
-        { role: "assistant", content: response.content },
-        { role: "user", content: toolResults },
-      ],
-    }, { timeout: 90000 });
-    analysis = followUp.content.filter(b => b.type === "text").map(b => b.text).join("\n\n");
-  }
-
-  return analysis.trim();
+  return response.content
+    .filter(b => b.type === "text")
+    .map(b => b.text)
+    .join("")
+    .trim();
 }
 
 export async function generateRegionalReport(regions, { month, year }) {
