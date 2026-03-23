@@ -117,7 +117,7 @@ function mergeMarketData(a, b) {
   };
 }
 
-function buildReportList(states) {
+function buildReportList(states, propertyTypes = null) {
   const configs = [];
   const stateMap = { "New York": BATCH_NY, "New Jersey": BATCH_NJ };
   for (const state of states) {
@@ -126,8 +126,11 @@ function buildReportList(states) {
       console.warn(`Unknown state: ${state} — skipping`);
       continue;
     }
+    const types = propertyTypes
+      ? batch.propertyTypes.filter(t => propertyTypes.includes(t))
+      : batch.propertyTypes;
     for (const county of batch.counties) {
-      for (const propertyType of batch.propertyTypes) {
+      for (const propertyType of types) {
         configs.push({ county, state, propertyType });
       }
     }
@@ -158,9 +161,9 @@ function saveReport(html, { county, state, propertyType, month, year }) {
  * @param {function} options.onProgress - callback({ current, total, county, state, propertyType })
  * @returns {Promise<object[]>} - array of result objects with status/path/error per report
  */
-export async function runBatch({ states, agent = {}, onProgress, collectData = false } = {}) {
+export async function runBatch({ states, propertyTypes = null, agent = {}, onProgress, collectData = false } = {}) {
   const { month, year } = lastCompletedMonth();
-  const configs = buildReportList(states);
+  const configs = buildReportList(states, propertyTypes);
   const total = configs.length;
   const results = [];
 

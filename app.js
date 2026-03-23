@@ -75,7 +75,7 @@ app.post("/api/generate", async (req, res) => {
 });
 
 app.post("/api/batch-generate", async (req, res) => {
-  const { states, agent, includeRegional = true } = req.body;
+  const { states, propertyTypes, agent, includeRegional = true } = req.body;
   if (!states || !states.length) {
     return res.status(400).json({ error: "Missing required field: states" });
   }
@@ -94,6 +94,7 @@ app.post("/api/batch-generate", async (req, res) => {
 
     const results = await runBatch({
       states,
+      propertyTypes: propertyTypes && propertyTypes.length ? propertyTypes : null,
       agent: agent || {},
       collectData: includeRegional,
       onProgress: ({ current, total, county, state, propertyType }) => {

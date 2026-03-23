@@ -559,12 +559,28 @@
   <div class="checkbox-group">
     <label class="checkbox-item">
       <input type="checkbox" id="batch-ny" checked>
-      <span class="check-label">New York <span class="check-meta">8 counties &times; 2 types = 16 reports</span></span>
+      <span class="check-label">New York <span class="check-meta">8 counties</span></span>
     </label>
     <label class="checkbox-item">
       <input type="checkbox" id="batch-nj" checked>
-      <span class="check-label">New Jersey <span class="check-meta">12 counties &times; 2 types = 24 reports</span></span>
+      <span class="check-label">New Jersey <span class="check-meta">12 counties</span></span>
     </label>
+  </div>
+
+  <div class="agent-label" style="margin-top:16px">Property Types</div>
+  <div class="checkbox-group">
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-sfr" checked>
+      <span class="check-label">Single Family Residence</span>
+    </label>
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-condo" checked>
+      <span class="check-label">Condos / Townhomes</span>
+    </label>
+  </div>
+
+  <div style="margin:14px 0 18px;font-size:13px;color:#555" id="batch-report-count">
+    Total: <strong id="batch-count-num">40</strong> reports
   </div>
 
   <div class="checkbox-group" style="margin-bottom:22px">
@@ -797,11 +813,29 @@
 
   let batchTimer = null;
 
+  // Dynamic report count
+  const STATE_COUNTS = { ny: 8, nj: 12 };
+  function updateBatchCount() {
+    const states = (document.getElementById("batch-ny").checked ? STATE_COUNTS.ny : 0)
+                 + (document.getElementById("batch-nj").checked ? STATE_COUNTS.nj : 0);
+    const types  = (document.getElementById("batch-sfr").checked ? 1 : 0)
+                 + (document.getElementById("batch-condo").checked ? 1 : 0);
+    document.getElementById("batch-count-num").textContent = states * types;
+  }
+  ["batch-ny","batch-nj","batch-sfr","batch-condo"].forEach(id =>
+    document.getElementById(id).addEventListener("change", updateBatchCount)
+  );
+
   batchBtn.addEventListener("click", async () => {
     const states = [];
     if (document.getElementById("batch-ny").checked) states.push("New York");
     if (document.getElementById("batch-nj").checked) states.push("New Jersey");
     if (!states.length) { alert("Select at least one state."); return; }
+
+    const propertyTypes = [];
+    if (document.getElementById("batch-sfr").checked) propertyTypes.push("SingleFamilyResidence");
+    if (document.getElementById("batch-condo").checked) propertyTypes.push("CondoTownhome");
+    if (!propertyTypes.length) { alert("Select at least one property type."); return; }
 
     const includeRegional = document.getElementById("batch-regional").checked;
     const agent = {
@@ -826,7 +860,7 @@
       const res = await fetch("/api/batch-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ states, agent, includeRegional }),
+        body: JSON.stringify({ states, propertyTypes, agent, includeRegional }),
       });
 
       const reader = res.body.getReader();
