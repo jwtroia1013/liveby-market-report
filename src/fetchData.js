@@ -43,11 +43,11 @@ export async function fetchMarketReport({ county, state, month, year, propertySu
   const stateEncoded = encodeURIComponent(state);
   const base = `area-level-2=${countyEncoded}&area-level-1=${stateEncoded}&property-type=Residential&property-sub-type=${propertySubType}`;
 
-  // --- Call 1: Sold stats — 13 months grouped by month ---
-  const start13 = addMonths(year, month, -12);
-  const end13 = addMonths(year, month, 1);
-  const interval13 = `${firstOfMonth(start13.year, start13.month)}/${firstOfMonth(end13.year, end13.month)}`;
-  const soldMonthly = await apiFetch(`/v4/market-statistics?time-interval=${interval13}&${base}&group-by=month`);
+  // --- Call 1: Sold stats — 36 months grouped by month (covers 13-month trend + 3-year bar chart) ---
+  const start36 = addMonths(year, month, -35);
+  const end36 = addMonths(year, month, 1);
+  const interval36 = `${firstOfMonth(start36.year, start36.month)}/${firstOfMonth(end36.year, end36.month)}`;
+  const soldMonthly = await apiFetch(`/v4/market-statistics?time-interval=${interval36}&${base}&group-by=month`);
 
   const currentKey = periodKey(year, month);
   const lastMonthInfo = addMonths(year, month, -1);
@@ -82,11 +82,31 @@ export async function fetchMarketReport({ county, state, month, year, propertySu
     return extractPeriodData(findPeriod(soldMonthly, periodKey(info.year, info.month)));
   });
 
-  // --- Call 1b: New listings added — same 13-month window grouped by month ---
-  const addedToMarket = await apiFetch(`/v4/market-statistics/added-to-market?time-interval=${interval13}&${base}&group-by=month`);
+  // --- Call 1b: New listings added — same 36-month window grouped by month ---
+  const addedToMarket = await apiFetch(`/v4/market-statistics/added-to-market?time-interval=${interval36}&${base}&group-by=month`);
   const newListingsCurrent  = findPeriod(addedToMarket, currentKey)?.data?.count ?? null;
   const newListingsLastMonth = findPeriod(addedToMarket, lastMonthKey)?.data?.count ?? null;
   const newListingsLastYear  = findPeriod(addedToMarket, lastYearKey)?.data?.count ?? null;
+
+  // --- Chart data: homes sold by calendar month for 3 years (Page 4 bar chart) ---
+  const MONTH_ABBR = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const soldByCalendarMonth = Array.from({ length: 12 }, (_, i) => ({
+    label: MONTH_ABBR[i],
+    [year]:     findPeriod(soldMonthly, periodKey(year,     i + 1))?.data?.count ?? null,
+    [year - 1]: findPeriod(soldMonthly, periodKey(year - 1, i + 1))?.data?.count ?? null,
+    [year - 2]: findPeriod(soldMonthly, periodKey(year - 2, i + 1))?.data?.count ?? null,
+  }));
+
+  // --- Chart data: sale-to-list ratio for last 13 months (Page 4 line chart) ---
+  const saleToListTrend = Array.from({ length: 13 }, (_, i) => {
+    const info = addMonths(year, month, i - 12);
+    const entry = findPeriod(soldMonthly, periodKey(info.year, info.month));
+    return {
+      label: `${MONTH_ABBR[info.month - 1]} ${info.year}`,
+      shortLabel: MONTH_ABBR[info.month - 1],
+      value: entry?.data?.saleToListRatio ?? null,
+    };
+  });
 
   // --- Call 2: YTD sold stats ---
   const endMonth = month + 1 > 12 ? 1 : month + 1;
@@ -160,5 +180,7 @@ export async function fetchMarketReport({ county, state, month, year, propertySu
     newListingsCurrent,
     newListingsLastMonth,
     newListingsLastYear,
+    soldByCalendarMonth,
+    saleToListTrend,
   };
 }

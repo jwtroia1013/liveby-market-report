@@ -154,11 +154,113 @@ function buildPage2Table(data) {
   return summaryRow + segmentRows;
 }
 
+function svgBarChart(years, months) {
+  const W = 680, H = 230, mL = 40, mR = 10, mT = 15, mB = 34;
+  const cW = W - mL - mR, cH = H - mT - mB;
+  const allVals = months.flatMap(m => years.map(y => m[y]).filter(v => v != null));
+  if (!allVals.length) return "";
+  const maxV = Math.ceil(Math.max(...allVals) / 10) * 10 || 10;
+  const colors = ["#1a4a3a", "#c8963e", "#aaa"];
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
+  for (let i = 0; i <= 5; i++) {
+    const v = maxV * i / 5;
+    const y = (mT + cH - (v / maxV) * cH).toFixed(1);
+    s += `<line x1="${mL}" y1="${y}" x2="${W - mR}" y2="${y}" stroke="#ebebeb" stroke-width="1"/>`;
+    s += `<text x="${mL - 4}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#aaa">${Math.round(v)}</text>`;
+  }
+  const gW = cW / 12;
+  const bW = Math.max(Math.min((gW - 8) / 3 - 1, 14), 5);
+  months.forEach((m, gi) => {
+    const cx = mL + (gi + 0.5) * gW;
+    const totalW = years.length * bW + (years.length - 1) * 2;
+    years.forEach((yr, bi) => {
+      const v = m[yr];
+      if (!v) return;
+      const bh = ((v / maxV) * cH).toFixed(1);
+      const bx = (cx - totalW / 2 + bi * (bW + 2)).toFixed(1);
+      const by = (mT + cH - +bh).toFixed(1);
+      s += `<rect x="${bx}" y="${by}" width="${bW}" height="${bh}" fill="${colors[bi]}"/>`;
+    });
+    s += `<text x="${cx.toFixed(1)}" y="${H - mB + 13}" text-anchor="middle" font-size="9" fill="#aaa">${m.label}</text>`;
+  });
+  s += `<line x1="${mL}" y1="${mT}" x2="${mL}" y2="${mT + cH}" stroke="#ddd" stroke-width="1"/>`;
+  s += `<line x1="${mL}" y1="${mT + cH}" x2="${W - mR}" y2="${mT + cH}" stroke="#ddd" stroke-width="1"/>`;
+  s += `</svg>`;
+  return s;
+}
+
+function svgLineChart(points) {
+  const valid = points.filter(p => p.value != null);
+  if (!valid.length) return "";
+  const W = 490, H = 175, mL = 44, mR = 10, mT = 14, mB = 28;
+  const cW = W - mL - mR, cH = H - mT - mB;
+  const vals = valid.map(p => p.value * 100);
+  const minV = Math.floor(Math.min(...vals)) - 1;
+  const maxV = Math.ceil(Math.max(...vals)) + 1;
+  const rng = maxV - minV;
+  const n = points.length;
+  const toX = i => (mL + (i / (n - 1)) * cW).toFixed(1);
+  const toY = v => (mT + cH - ((v * 100 - minV) / rng) * cH).toFixed(1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;display:block">`;
+  for (let v = minV; v <= maxV; v++) {
+    const y = toY(v / 100);
+    s += `<line x1="${mL}" y1="${y}" x2="${W - mR}" y2="${y}" stroke="#eee" stroke-width="1"/>`;
+    s += `<text x="${mL - 4}" y="${(+y + 3.5).toFixed(1)}" text-anchor="end" font-size="9" fill="#aaa">${v}%</text>`;
+  }
+  if (minV < 100 && maxV > 100) {
+    s += `<line x1="${mL}" y1="${toY(1.0)}" x2="${W - mR}" y2="${toY(1.0)}" stroke="#c8963e" stroke-width="1" stroke-dasharray="4,3" opacity="0.5"/>`;
+  }
+  let d = "";
+  points.forEach((p, i) => { if (p.value != null) d += `${d ? "L" : "M"}${toX(i)},${toY(p.value)} `; });
+  s += `<path d="${d.trim()}" fill="none" stroke="#1a4a3a" stroke-width="2"/>`;
+  points.forEach((p, i) => { if (p.value != null) s += `<circle cx="${toX(i)}" cy="${toY(p.value)}" r="3" fill="#1a4a3a"/>`; });
+  points.forEach((p, i) => {
+    if (i % 2 !== 0 && i !== n - 1) return;
+    s += `<text x="${toX(i)}" y="${H - mB + 12}" text-anchor="middle" font-size="9" fill="#aaa">${p.shortLabel}</text>`;
+  });
+  s += `<line x1="${mL}" y1="${mT}" x2="${mL}" y2="${mT + cH}" stroke="#ddd" stroke-width="1"/>`;
+  s += `<line x1="${mL}" y1="${mT + cH}" x2="${W - mR}" y2="${mT + cH}" stroke="#ddd" stroke-width="1"/>`;
+  s += `</svg>`;
+  return s;
+}
+
+function svgGauge(moi) {
+  const W = 300, H = 168, cx = 150, cy = 155, ro = 118, ri = 95;
+  const maxMOI = 10;
+  const clamp = moi != null ? Math.min(Math.max(moi, 0), maxMOI) : 5;
+  // angle: 0 = right (Seller's, low MOI), π = left (Buyer's, high MOI)
+  const toAng = v => (v / maxMOI) * Math.PI;
+  function arc(a1, a2, fill) {
+    const [c1, s1, c2, s2] = [Math.cos(a1), Math.sin(a1), Math.cos(a2), Math.sin(a2)];
+    const xo1 = (cx + ro * c1).toFixed(1), yo1 = (cy - ro * s1).toFixed(1);
+    const xo2 = (cx + ro * c2).toFixed(1), yo2 = (cy - ro * s2).toFixed(1);
+    const xi1 = (cx + ri * c1).toFixed(1), yi1 = (cy - ri * s1).toFixed(1);
+    const xi2 = (cx + ri * c2).toFixed(1), yi2 = (cy - ri * s2).toFixed(1);
+    return `<path d="M${xo1},${yo1} A${ro},${ro} 0 0,0 ${xo2},${yo2} L${xi2},${yi2} A${ri},${ri} 0 0,1 ${xi1},${yi1} Z" fill="${fill}"/>`;
+  }
+  const needleA = toAng(clamp);
+  const nX = (cx + 86 * Math.cos(needleA)).toFixed(1);
+  const nY = (cy - 86 * Math.sin(needleA)).toFixed(1);
+  let s = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px;height:auto;display:block;margin:0 auto">`;
+  s += arc(toAng(0), toAng(4), "#2d7a4f");
+  s += arc(toAng(4), toAng(6), "#c8963e");
+  s += arc(toAng(6), toAng(10), "#c0392b");
+  s += `<line x1="${cx}" y1="${cy}" x2="${nX}" y2="${nY}" stroke="#222" stroke-width="3" stroke-linecap="round"/>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="6" fill="#222"/>`;
+  s += `<text x="${cx}" y="${cy - 18}" text-anchor="middle" font-family="serif" font-size="22" font-weight="700" fill="#1a4a3a">${moi != null ? moi.toFixed(1) : "—"}</text>`;
+  s += `<text x="${cx}" y="${cy - 4}" text-anchor="middle" font-size="9" fill="#666">Months of Inventory</text>`;
+  s += `<text x="${cx - ro - 2}" y="${cy + 14}" text-anchor="end" font-size="8" fill="#c0392b" font-weight="700">Buyer's</text>`;
+  s += `<text x="${cx + ro + 2}" y="${cy + 14}" text-anchor="start" font-size="8" fill="#2d7a4f" font-weight="700">Seller's</text>`;
+  s += `</svg>`;
+  return s;
+}
+
 export function generateReport(data, analysis = null, agentOverride = null) {
   const { county, state, month, year, propertySubType,
           currentPeriod, lastMonthPeriod, lastYearPeriod,
           ytdCount, lastMonthYtdCount, priorYtdCount, activeSnapshot, underContractCount,
-          newListingsCurrent, newListingsLastMonth, newListingsLastYear } = data;
+          newListingsCurrent, newListingsLastMonth, newListingsLastYear,
+          soldByCalendarMonth, saleToListTrend } = data;
 
   const monthName = MONTH_NAMES[month - 1];
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence" : propertySubType;
@@ -708,6 +810,127 @@ export function generateReport(data, analysis = null, agentOverride = null) {
       : `<p class="analysis-generating">Market analysis unavailable.</p>`
     }
   </div>
+
+  <div class="spacer"></div>
+  ${footer}
+</div>
+
+<!-- PAGE 4 -->
+<div class="page">
+  ${pageHeader(`${monthName} ${year} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+
+  <div class="section-title">Homes Sold</div>
+  ${svgBarChart([year, year - 1, year - 2], soldByCalendarMonth)}
+  <div style="display:flex;gap:18px;margin:8px 0 20px;font-size:11px;align-items:center">
+    <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:12px;height:12px;background:#1a4a3a;border-radius:2px"></span> ${year}</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:12px;height:12px;background:#c8963e;border-radius:2px"></span> ${year - 1}</span>
+    <span style="display:flex;align-items:center;gap:5px"><span style="display:inline-block;width:12px;height:12px;background:#aaa;border-radius:2px"></span> ${year - 2}</span>
+  </div>
+
+  <div class="section-title">Sale to List Price Ratio</div>
+  <div style="display:flex;gap:20px;align-items:center">
+    <div style="flex:0 0 148px;border:1px solid #d8d4cc;border-radius:5px;padding:18px 14px;text-align:center">
+      <div style="font-size:11px;color:#888;font-style:italic;margin-bottom:4px">Average</div>
+      <div style="font-family:'Playfair Display',serif;font-size:34px;font-weight:700;color:${branding.primaryColor};line-height:1">
+        ${currentPeriod?.saleToListRatio != null ? (currentPeriod.saleToListRatio * 100).toFixed(0) + "%" : "—"}
+      </div>
+      <div style="font-size:10px;color:#666;margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1.4">
+        Sale to List<br>Price Ratio
+      </div>
+      <div style="font-size:10px;color:#999;margin-top:6px">${monthName} ${year}</div>
+    </div>
+    <div style="flex:1;min-width:0">${svgLineChart(saleToListTrend)}</div>
+  </div>
+
+  <div class="spacer"></div>
+  ${footer}
+</div>
+
+<!-- PAGE 5 -->
+<div class="page">
+  ${pageHeader("Market Conditions")}
+
+  <div style="display:flex;gap:14px;align-items:center;justify-content:center;margin-bottom:28px">
+    <div style="flex:0 0 148px;border:1px solid #d8d4cc;border-top:3px solid ${branding.accentColor};border-radius:4px;padding:18px 14px;text-align:center">
+      <div style="font-family:'Playfair Display',serif;font-size:38px;font-weight:700;color:${branding.primaryColor};line-height:1">
+        ${activeSnapshot.medianDaysOnSite ?? "—"}
+      </div>
+      <div style="font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:8px;line-height:1.4">
+        Median Days<br>on Market
+      </div>
+    </div>
+    <div style="flex:1;min-width:0;text-align:center">
+      ${(() => {
+        const moi = (activeSnapshot.count && currentPeriod?.count)
+          ? activeSnapshot.count / currentPeriod.count
+          : null;
+        return `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:4px">Balanced Market</div>
+                ${svgGauge(moi)}`;
+      })()}
+    </div>
+    <div style="flex:0 0 148px;border:1px solid #d8d4cc;border-top:3px solid ${branding.accentColor};border-radius:4px;padding:18px 14px;text-align:center">
+      <div style="font-family:'Playfair Display',serif;font-size:38px;font-weight:700;color:${branding.primaryColor};line-height:1">
+        ${currentPeriod?.saleToListRatio != null ? (currentPeriod.saleToListRatio * 100).toFixed(0) + "%" : "—"}
+      </div>
+      <div style="font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:8px;line-height:1.4">
+        Avg Sale to<br>List Price Ratio
+      </div>
+      <div style="font-size:10px;color:#999;margin-top:6px">${monthName} ${year}</div>
+    </div>
+  </div>
+
+  <div class="section-title">Buyer's vs. Seller's Market</div>
+  <p style="font-size:11.5px;color:#555;margin-bottom:14px">This graphic explains the key similarities and differences between a buyer's and seller's market, and how these market factors impact each group.</p>
+
+  <table style="border-collapse:collapse;width:100%;font-size:11.5px">
+    <thead>
+      <tr>
+        <th style="width:22%;padding:8px 12px;background:transparent;border:none"></th>
+        <th style="padding:9px 14px;background:#c0392b;color:#fff;text-align:center;border-radius:3px 3px 0 0;font-size:11px;letter-spacing:0.4px">Buyer's Market<br><span style="font-weight:400;font-size:10px;opacity:0.85">More homes than buyers</span></th>
+        <th style="padding:9px 14px;background:#2d7a4f;color:#fff;text-align:center;border-radius:3px 3px 0 0;font-size:11px;letter-spacing:0.4px">Seller's Market<br><span style="font-weight:400;font-size:10px;opacity:0.85">More buyers than homes</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="padding:10px 12px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:${branding.primaryColor};background:#f5f7f5;vertical-align:top;border:1px solid #e0e5e0">How it Impacts<br>Buyers</td>
+        <td style="padding:10px 14px;background:#fdf5f5;border:1px solid #e0e5e0;vertical-align:top">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>More homes to choose from</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Could spend less than asking price</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Price reductions more common</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Rarely competing offers</span></div>
+          </div>
+        </td>
+        <td style="padding:10px 14px;background:#f0f7f3;border:1px solid #e0e5e0;vertical-align:top">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Fewer homes to choose from</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Need to be able to close quickly</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>May pay more than asking price</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Competition from other buyers</span></div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:10px 12px;font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:${branding.primaryColor};background:#f5f7f5;vertical-align:top;border:1px solid #e0e5e0">How it Impacts<br>Sellers</td>
+        <td style="padding:10px 14px;background:#fdf5f5;border:1px solid #e0e5e0;vertical-align:top">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Takes more time to sell</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Fewer offers received</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>Could get less than asking price</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#c0392b;font-weight:700;flex-shrink:0">—</span><span>May need to make repairs or concessions</span></div>
+          </div>
+        </td>
+        <td style="padding:10px 14px;background:#f0f7f3;border:1px solid #e0e5e0;vertical-align:top">
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Homes sell quickly</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Multiple offers likely</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Could get more than asking price</span></div>
+            <div style="display:flex;align-items:flex-start;gap:7px"><span style="color:#2d7a4f;font-weight:700;flex-shrink:0">—</span><span>Buyers willing to overlook repairs</span></div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
 
   <div class="spacer"></div>
   ${footer}
