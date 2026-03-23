@@ -513,8 +513,7 @@
     <label for="type-select">Property Type</label>
     <select id="type-select">
       <option value="SingleFamilyResidence">Single Family Residence</option>
-      <option value="Condominium">Condominium</option>
-      <option value="Townhouse">Townhouse</option>
+      <option value="CondoTownhome">Condos / Townhomes</option>
     </select>
   </div>
 
@@ -564,7 +563,7 @@
     </label>
     <label class="checkbox-item">
       <input type="checkbox" id="batch-nj" checked>
-      <span class="check-label">New Jersey <span class="check-meta">12 counties &times; 3 types = 36 reports</span></span>
+      <span class="check-label">New Jersey <span class="check-meta">12 counties &times; 2 types = 24 reports</span></span>
     </label>
   </div>
 
@@ -884,7 +883,7 @@
       byState[r.state][r.county].push(r);
     }
 
-    const typeLabels = { SingleFamilyResidence: "SFR", Condominium: "Condo", Townhouse: "Townhouse" };
+    const typeLabels = { SingleFamilyResidence: "SFR", CondoTownhome: "Condos/Townhomes" };
 
     let html = "";
 
