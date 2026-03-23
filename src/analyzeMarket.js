@@ -27,6 +27,7 @@ export async function analyzeMarket(data) {
 
   const monthName = MONTH_NAMES[month - 1];
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "single family homes"
+    : propertySubType === "CondoTownhome" ? "condominiums and townhomes"
     : propertySubType === "Condominium" ? "condominiums"
     : "townhouses";
 
@@ -91,7 +92,7 @@ Guidelines:
     max_tokens: 1024,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
     messages: [{ role: "user", content: prompt }],
-  });
+  }, { timeout: 90000 });
 
   // Collect all text blocks from the response (may span tool use turns)
   let analysis = "";
@@ -114,7 +115,7 @@ Guidelines:
         { role: "assistant", content: response.content },
         { role: "user", content: toolResults },
       ],
-    });
+    }, { timeout: 90000 });
 
     analysis = followUp.content
       .filter(b => b.type === "text")

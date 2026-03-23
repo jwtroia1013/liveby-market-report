@@ -58,7 +58,7 @@ Guidelines:
     max_tokens: 1024,
     tools: [{ type: "web_search_20250305", name: "web_search" }],
     messages: [{ role: "user", content: prompt }],
-  });
+  }, { timeout: 90000 });
 
   let analysis = response.content.filter(b => b.type === "text").map(b => b.text).join("");
 
@@ -75,7 +75,7 @@ Guidelines:
         { role: "assistant", content: response.content },
         { role: "user", content: toolResults },
       ],
-    });
+    }, { timeout: 90000 });
     analysis = followUp.content.filter(b => b.type === "text").map(b => b.text).join("\n\n");
   }
 
