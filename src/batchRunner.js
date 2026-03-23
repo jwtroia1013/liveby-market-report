@@ -184,9 +184,6 @@ export async function runBatch({ states, agent = {}, onProgress, collectData = f
         data = await fetchMarketReport({ county, state, month, year, propertySubType: propertyType });
       }
 
-      // Breathing room before Anthropic API call
-      await delay(2000);
-
       console.log(`[${i + 1}/${total}] Analyzing: ${county}, ${state} — ${propertyType}`);
       const analysis = await analyzeMarket(data);
 
