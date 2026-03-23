@@ -303,6 +303,176 @@
       color: var(--muted);
       font-style: italic;
     }
+
+    /* ── Batch card ── */
+    .card-batch {
+      background: var(--card-bg);
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      padding: 36px 40px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.06);
+      margin-top: 24px;
+    }
+
+    .batch-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--green);
+      margin-bottom: 4px;
+    }
+
+    .batch-subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 22px;
+      font-weight: 300;
+    }
+
+    .checkbox-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      accent-color: var(--green);
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .checkbox-item .check-label {
+      font-size: 14px;
+      color: var(--text);
+      font-weight: 600;
+    }
+
+    .checkbox-item .check-meta {
+      font-size: 12px;
+      color: var(--muted);
+      margin-left: 4px;
+      font-weight: 400;
+    }
+
+    /* ── Progress bar ── */
+    .progress-wrap {
+      margin-top: 16px;
+      display: none;
+    }
+
+    .progress-wrap.visible { display: block; }
+
+    .progress-bar-track {
+      height: 6px;
+      background: #ddd;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--green);
+      border-radius: 3px;
+      transition: width 0.4s ease;
+      width: 0%;
+    }
+
+    .progress-text {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* ── Batch results ── */
+    .batch-results {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .batch-results.visible { display: block; }
+
+    .results-group {
+      margin-bottom: 16px;
+    }
+
+    .results-group-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+
+    .results-county {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+    }
+
+    .results-county:last-child { border-bottom: none; }
+
+    .results-county-name { font-weight: 600; color: #333; }
+
+    .results-county-links { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+
+    .results-county-links a {
+      color: var(--green);
+      text-decoration: none;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      transition: background 0.1s;
+    }
+
+    .results-county-links a:hover { background: var(--bg); }
+
+    .regional-link {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      background: #eef5f1;
+      border: 1px solid #b8d4c4;
+      border-radius: 4px;
+      margin-bottom: 14px;
+      text-decoration: none;
+      color: var(--green);
+      font-weight: 700;
+      font-size: 14px;
+      transition: background 0.1s;
+    }
+
+    .regional-link:hover { background: #ddeee6; }
+
+    .index-link {
+      display: block;
+      text-align: center;
+      margin-bottom: 16px;
+      font-size: 13px;
+      color: var(--green);
+      font-weight: 600;
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -379,6 +549,67 @@
   <ul id="recent-list">
     <li><span class="empty-recent">No reports generated yet.</span></li>
   </ul>
+</div>
+
+<!-- ── BATCH CARD ── -->
+<div class="card-batch">
+  <div class="batch-title">Generate All Reports</div>
+  <p class="batch-subtitle">Run all county reports for selected states in one batch.</p>
+
+  <div class="agent-label">Select States</div>
+  <div class="checkbox-group">
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-ny" checked>
+      <span class="check-label">New York <span class="check-meta">8 counties &times; 2 types = 16 reports</span></span>
+    </label>
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-nj" checked>
+      <span class="check-label">New Jersey <span class="check-meta">12 counties &times; 3 types = 36 reports</span></span>
+    </label>
+  </div>
+
+  <div class="checkbox-group" style="margin-bottom:22px">
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-regional" checked>
+      <span class="check-label">Include Regional Overview <span class="check-meta">AI-generated cross-region summary</span></span>
+    </label>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="agent-label">Agent Info for Reports</div>
+  <div class="form-group">
+    <label for="batch-agent-name">Name</label>
+    <input type="text" id="batch-agent-name" placeholder="e.g. Jane Smith">
+  </div>
+  <div class="form-group">
+    <label for="batch-agent-email">Email</label>
+    <input type="email" id="batch-agent-email" placeholder="e.g. jane@randrealty.com">
+  </div>
+  <div class="form-group">
+    <label for="batch-agent-website">Website</label>
+    <input type="text" id="batch-agent-website" placeholder="e.g. jane.agent.randcenter.com">
+  </div>
+
+  <button class="btn" id="batch-btn">Generate All Reports</button>
+
+  <div class="progress-wrap" id="batch-progress">
+    <div style="margin-bottom:10px">
+      <div class="status loading" style="display:flex;margin-top:0">
+        <div class="spinner"></div>
+        <span class="status-msg" id="batch-status-msg">Starting…</span>
+      </div>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="batch-bar"></div>
+    </div>
+    <div class="progress-text">
+      <span id="batch-counter">0 of 0</span>
+      <span id="batch-elapsed">0s elapsed</span>
+    </div>
+  </div>
+
+  <div class="batch-results" id="batch-results"></div>
 </div>
 
 <script>
@@ -554,6 +785,139 @@
         </a>
       </li>
     `).join("");
+  }
+
+  // ── Batch generation ──
+  const batchBtn       = document.getElementById("batch-btn");
+  const batchProgress  = document.getElementById("batch-progress");
+  const batchStatusMsg = document.getElementById("batch-status-msg");
+  const batchBar       = document.getElementById("batch-bar");
+  const batchCounter   = document.getElementById("batch-counter");
+  const batchElapsed   = document.getElementById("batch-elapsed");
+  const batchResults   = document.getElementById("batch-results");
+
+  let batchTimer = null;
+
+  batchBtn.addEventListener("click", async () => {
+    const states = [];
+    if (document.getElementById("batch-ny").checked) states.push("New York");
+    if (document.getElementById("batch-nj").checked) states.push("New Jersey");
+    if (!states.length) { alert("Select at least one state."); return; }
+
+    const includeRegional = document.getElementById("batch-regional").checked;
+    const agent = {
+      name:    document.getElementById("batch-agent-name").value.trim(),
+      email:   document.getElementById("batch-agent-email").value.trim(),
+      website: document.getElementById("batch-agent-website").value.trim(),
+    };
+
+    batchBtn.disabled = true;
+    batchResults.classList.remove("visible");
+    batchResults.innerHTML = "";
+    batchProgress.classList.add("visible");
+    batchBar.style.width = "0%";
+    batchCounter.textContent = "0 of ?";
+
+    const startTime = Date.now();
+    batchTimer = setInterval(() => {
+      batchElapsed.textContent = Math.floor((Date.now() - startTime) / 1000) + "s elapsed";
+    }, 1000);
+
+    try {
+      const res = await fetch("/api/batch-generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ states, agent, includeRegional }),
+      });
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.startsWith(": ")) continue; // keepalive ping
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6));
+
+          if (event.type === "progress") {
+            const pct = Math.round((event.current / event.total) * 100);
+            batchBar.style.width = pct + "%";
+            batchCounter.textContent = `${event.current} of ${event.total}`;
+            batchStatusMsg.textContent = event.message;
+          } else if (event.type === "status") {
+            batchStatusMsg.textContent = event.message;
+          } else if (event.type === "done") {
+            clearInterval(batchTimer);
+            batchBar.style.width = "100%";
+            batchStatusMsg.textContent = `Done — ${event.succeeded} reports generated`;
+            renderBatchResults(event);
+          } else if (event.type === "error") {
+            throw new Error(event.message);
+          }
+        }
+      }
+    } catch (err) {
+      clearInterval(batchTimer);
+      batchStatusMsg.textContent = "Error: " + err.message;
+    } finally {
+      batchBtn.disabled = false;
+    }
+  });
+
+  function renderBatchResults(event) {
+    const { results, regionalPath, indexPath, month, year } = event;
+    const monthName = MONTH_NAMES[month - 1];
+
+    // Group by state → county
+    const byState = {};
+    for (const r of results) {
+      if (r.status !== "success") continue;
+      if (!byState[r.state]) byState[r.state] = {};
+      if (!byState[r.state][r.county]) byState[r.state][r.county] = [];
+      byState[r.state][r.county].push(r);
+    }
+
+    const typeLabels = { SingleFamilyResidence: "SFR", Condominium: "Condo", Townhouse: "Townhouse" };
+
+    let html = "";
+
+    if (indexPath) {
+      html += `<a href="/${indexPath}" target="_blank" class="index-link">View Full Report Index — ${monthName} ${year} ↗</a>`;
+    }
+
+    if (regionalPath) {
+      html += `<a href="/${regionalPath}" target="_blank" class="regional-link">Regional Overview — ${monthName} ${year} ↗</a>`;
+    }
+
+    for (const [state, counties] of Object.entries(byState)) {
+      html += `<div class="results-group">
+        <div class="results-group-label">${state}</div>`;
+      for (const [county, reports] of Object.entries(counties)) {
+        const links = reports.map(r =>
+          `<a href="/${r.path}" target="_blank">${typeLabels[r.propertyType] || r.propertyType} ↗</a>`
+        ).join("");
+        html += `<div class="results-county">
+          <span class="results-county-name">${county}</span>
+          <span class="results-county-links">${links}</span>
+        </div>`;
+      }
+      html += `</div>`;
+    }
+
+    const failed = results.filter(r => r.status === "error");
+    if (failed.length) {
+      html += `<div style="margin-top:12px;font-size:12px;color:#c0392b"><strong>${failed.length} failed:</strong> ${failed.map(r => `${r.county} (${typeLabels[r.propertyType]})`).join(", ")}</div>`;
+    }
+
+    batchResults.innerHTML = html;
+    batchResults.classList.add("visible");
   }
 </script>
 

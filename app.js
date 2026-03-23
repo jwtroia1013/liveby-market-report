@@ -5,6 +5,10 @@ import { fileURLToPath } from "url";
 import { fetchMarketReport } from "./src/fetchData.js";
 import { generateReport } from "./src/generateReport.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
+import { runBatch } from "./src/batchRunner.js";
+import { aggregateRegions } from "./src/regionalData.js";
+import { generateRegionalReport } from "./src/generateRegionalReport.js";
+import { generateIndex } from "./src/generateIndex.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -66,6 +70,71 @@ app.post("/api/generate", async (req, res) => {
     console.error("Generation error:", err);
     send("error", { message: err.message });
   } finally {
+    res.end();
+  }
+});
+
+app.post("/api/batch-generate", async (req, res) => {
+  const { states, agent, includeRegional = true } = req.body;
+  if (!states || !states.length) {
+    return res.status(400).json({ error: "Missing required field: states" });
+  }
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+
+  // Keep connection alive every 20s for long-running batches
+  const keepalive = setInterval(() => res.write(": ping\n\n"), 20000);
+
+  try {
+    const { month, year } = lastCompletedMonth();
+
+    const results = await runBatch({
+      states,
+      agent: agent || {},
+      collectData: includeRegional,
+      onProgress: ({ current, total, county, state, propertyType }) => {
+        send("progress", { current, total, county, state, propertyType,
+          message: `Generating report ${current} of ${total}: ${county} County, ${state} — ${propertyType}` });
+      },
+    });
+
+    let regionalPath = null;
+    if (includeRegional) {
+      const successWithData = results.filter(r => r.status === "success" && r.data);
+      if (successWithData.length > 0) {
+        send("status", { message: "Generating Regional Overview…" });
+        const regions = aggregateRegions(successWithData);
+        if (regions.length > 0) {
+          const regionalHtml = await generateRegionalReport(regions, { month, year });
+          const pad = n => String(n).padStart(2, "0");
+          const regionalFile = `Regional-Overview-${pad(month)}-${year}.html`;
+          const outputDir = resolve(__dirname, "reports");
+          mkdirSync(outputDir, { recursive: true });
+          writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
+          regionalPath = `reports/${regionalFile}`;
+        }
+      }
+    }
+
+    send("status", { message: "Building report index…" });
+    const indexHtml = generateIndex(results, { month, year, regionalPath });
+    const pad = n => String(n).padStart(2, "0");
+    const indexFile = `index-${pad(month)}-${year}.html`;
+    writeFileSync(resolve(__dirname, "reports", indexFile), indexHtml, "utf-8");
+    const indexPath = `reports/${indexFile}`;
+
+    const succeeded = results.filter(r => r.status === "success");
+    const failed = results.filter(r => r.status === "error");
+    send("done", { results, regionalPath, indexPath, succeeded: succeeded.length, failed: failed.length, month, year });
+  } catch (err) {
+    console.error("Batch generation error:", err);
+    send("error", { message: err.message });
+  } finally {
+    clearInterval(keepalive);
     res.end();
   }
 });
