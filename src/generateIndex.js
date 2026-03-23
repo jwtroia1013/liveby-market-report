@@ -36,9 +36,16 @@ export function generateIndex(batchResults, { month, year, regionalPath = null, 
         </tr>`;
     }).join("");
 
+    const stateKey = state.replace(/\s+/g, "");
+    const pad = n => String(n).padStart(2, "0");
+    const combinedUrl = `/reports/combined/${stateKey}?month=${pad(month)}&year=${year}`;
+
     return `
       <div style="margin-bottom:28px">
-        <div style="font-family:'Playfair Display',serif;font-size:1.1em;font-weight:700;color:${branding.primaryColor};border-left:4px solid ${branding.accentColor};padding-left:10px;margin-bottom:10px">${state}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div style="font-family:'Playfair Display',serif;font-size:1.1em;font-weight:700;color:${branding.primaryColor};border-left:4px solid ${branding.accentColor};padding-left:10px">${state}</div>
+          <a href="${combinedUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;color:#fff;background:${branding.primaryColor};text-decoration:none;padding:5px 12px;border-radius:3px">⬇ Print All as PDF</a>
+        </div>
         <table style="width:100%;border-collapse:collapse;font-size:13px">
           <tbody>
             ${countyRows}

@@ -929,9 +929,16 @@
       html += `<a href="/${regionalPath}" target="_blank" class="regional-link">Regional Overview — ${monthName} ${year} ↗</a>`;
     }
 
+    const pad = n => String(n).padStart(2, "0");
+
     for (const [state, counties] of Object.entries(byState)) {
+      const stateKey = state.replace(/\s+/g, "");
+      const combinedUrl = `/reports/combined/${stateKey}?month=${pad(month)}&year=${year}`;
       html += `<div class="results-group">
-        <div class="results-group-label">${state}</div>`;
+        <div class="results-group-label" style="display:flex;align-items:center;justify-content:space-between">
+          <span>${state}</span>
+          <a href="${combinedUrl}" target="_blank" style="font-size:11px;font-weight:700;color:#fff;background:#1a4a3a;text-decoration:none;padding:4px 10px;border-radius:3px">⬇ Print All as PDF</a>
+        </div>`;
       for (const [county, reports] of Object.entries(counties)) {
         const links = reports.map(r =>
           `<a href="/${r.path}" target="_blank">${typeLabels[r.propertyType] || r.propertyType} ↗</a>`

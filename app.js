@@ -1,5 +1,5 @@
 import express from "express";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync, readdirSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fetchMarketReport } from "./src/fetchData.js";
@@ -140,6 +140,72 @@ app.post("/api/batch-generate", async (req, res) => {
     clearInterval(keepalive);
     res.end();
   }
+});
+
+const STATE_DISPLAY = { NewYork: "New York", NewJersey: "New Jersey" };
+const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+app.get("/reports/combined/:state", (req, res) => {
+  const { state } = req.params;
+  const { month, year } = req.query;
+
+  const dir = resolve(__dirname, "reports", state);
+  let files;
+  try {
+    files = readdirSync(dir)
+      .filter(f => f.endsWith(".html"))
+      .filter(f => (month && year) ? f.includes(`-${month}-${year}.html`) : true)
+      .sort();
+  } catch {
+    return res.status(404).send("<h2>No reports found for this state.</h2>");
+  }
+  if (!files.length) return res.status(404).send("<h2>No reports found.</h2>");
+
+  const stateName = STATE_DISPLAY[state] || state;
+  const dateMatch = files[0].match(/-(\d{2})-(\d{4})\.html$/);
+  const monthName = dateMatch ? MONTH_NAMES_FULL[parseInt(dateMatch[1]) - 1] : "";
+  const reportYear = dateMatch ? dateMatch[2] : "";
+
+  let sharedHead = "";
+  const bodyParts = [];
+
+  for (let i = 0; i < files.length; i++) {
+    const html = readFileSync(resolve(dir, files[i]), "utf-8");
+    if (i === 0) {
+      const m = html.match(/<head[^>]*>([\s\S]*?)<\/head>/i);
+      if (m) sharedHead = m[1].replace(/<title>[\s\S]*?<\/title>/i, "");
+    }
+    const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+    if (m) {
+      // Strip individual pdf-bar (no nested divs inside it, so first </div> closes it)
+      bodyParts.push(m[1].replace(/<div class="pdf-bar">[\s\S]*?<\/div>/, ""));
+    }
+  }
+
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${stateName} — ${monthName} ${reportYear} Combined Reports</title>
+  ${sharedHead}
+  <style>
+    .pdf-bar { display: none !important; }
+    .combined-bar { position: sticky; top: 0; z-index: 200; background: #1a4a3a; display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
+    .combined-bar span { font-family: "Playfair Display", serif; font-size: 14px; color: rgba(255,255,255,0.85); }
+    .combined-bar button { display: inline-flex; align-items: center; gap: 8px; background: #c8963e; color: white; border: none; border-radius: 4px; padding: 8px 20px; font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
+    @media print { .combined-bar { display: none; } }
+  </style>
+</head>
+<body>
+  <div class="combined-bar">
+    <span>${stateName} &mdash; ${monthName} ${reportYear} Market Reports &bull; ${files.length} reports</span>
+    <button onclick="window.print()">⬇ Save as PDF</button>
+  </div>
+  ${bodyParts.join("\n")}
+</body>
+</html>`);
 });
 
 app.listen(PORT, () => {
