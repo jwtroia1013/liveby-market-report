@@ -24,8 +24,97 @@ function pad(n) {
 
 function propertyTypeSlug(pt) {
   if (pt === "SingleFamilyResidence") return "SingleFamily";
-  if (pt === "Condominium") return "Condo";
+  if (pt === "CondoTownhome") return "CondoTownhome";
   return pt;
+}
+
+function mergePeriod(a, b) {
+  if (!a && !b) return null;
+  if (!a) return b;
+  if (!b) return a;
+  const count = (a.count ?? 0) + (b.count ?? 0);
+  const salesVolume = (a.salesVolume ?? 0) + (b.salesVolume ?? 0);
+  const aW = a.count ?? 0, bW = b.count ?? 0, totalW = aW + bW;
+  const wavg = (av, bv) =>
+    totalW > 0 && (av != null || bv != null)
+      ? ((av ?? 0) * aW + (bv ?? 0) * bW) / totalW
+      : null;
+  return {
+    count,
+    salesVolume,
+    medianSalePrice: salesVolume && count ? salesVolume / count : null,
+    medianListPrice: wavg(a.medianListPrice, b.medianListPrice),
+    saleToListRatio: wavg(a.saleToListRatio, b.saleToListRatio),
+    medianDaysOnMarket: wavg(a.medianDaysOnMarket, b.medianDaysOnMarket),
+  };
+}
+
+function mergeMarketData(a, b) {
+  const soldByCalendarMonth = a.soldByCalendarMonth.map((aMonth, i) => {
+    const bMonth = b.soldByCalendarMonth[i];
+    const merged = { label: aMonth.label };
+    for (const key of Object.keys(aMonth)) {
+      if (key === "label") continue;
+      merged[key] = (aMonth[key] ?? 0) + (bMonth?.[key] ?? 0);
+    }
+    return merged;
+  });
+
+  const saleToListTrend = a.saleToListTrend.map((aEntry, i) => {
+    const bEntry = b.saleToListTrend[i];
+    const aCount = a.currentPeriod?.count ?? 1;
+    const bCount = b.currentPeriod?.count ?? 1;
+    const total = aCount + bCount;
+    const value = (aEntry.value != null || bEntry?.value != null)
+      ? ((aEntry.value ?? 0) * aCount + (bEntry?.value ?? 0) * bCount) / total
+      : null;
+    return { label: aEntry.label, shortLabel: aEntry.shortLabel, value };
+  });
+
+  const activeBySegment = a.activeBySegment.map((aSeg, i) => {
+    const bSeg = b.activeBySegment[i];
+    return { ...aSeg, data: { ...aSeg.data, count: (aSeg.data?.count ?? 0) + (bSeg?.data?.count ?? 0) } };
+  });
+
+  const soldBySegment = a.soldBySegment.map((aPeriod) => {
+    const bPeriod = b.soldBySegment.find(p => p.period === aPeriod.period);
+    return { ...aPeriod, data: { ...aPeriod.data, count: (aPeriod.data?.count ?? 0) + (bPeriod?.data?.count ?? 0) } };
+  });
+
+  const aW = a.activeSnapshot?.count ?? 0, bW = b.activeSnapshot?.count ?? 0, totW = aW + bW;
+  const awavg = (av, bv) => totW > 0 ? ((av ?? 0) * aW + (bv ?? 0) * bW) / totW : null;
+
+  return {
+    county: a.county,
+    state: a.state,
+    month: a.month,
+    year: a.year,
+    propertySubType: "CondoTownhome",
+    soldMonthly: a.soldMonthly,
+    currentPeriod: mergePeriod(a.currentPeriod, b.currentPeriod),
+    lastMonthPeriod: mergePeriod(a.lastMonthPeriod, b.lastMonthPeriod),
+    lastYearPeriod: mergePeriod(a.lastYearPeriod, b.lastYearPeriod),
+    threeMonthPeriods: a.threeMonthPeriods.map((p, i) => mergePeriod(p, b.threeMonthPeriods[i])),
+    ytdCount: (a.ytdCount ?? 0) + (b.ytdCount ?? 0),
+    lastMonthYtdCount: (a.lastMonthYtdCount ?? 0) + (b.lastMonthYtdCount ?? 0),
+    priorYtdCount: (a.priorYtdCount ?? 0) + (b.priorYtdCount ?? 0),
+    activeSnapshot: {
+      count: aW + bW,
+      medianListPrice: awavg(a.activeSnapshot?.medianListPrice, b.activeSnapshot?.medianListPrice),
+      highPrice: Math.max(a.activeSnapshot?.highPrice ?? 0, b.activeSnapshot?.highPrice ?? 0) || null,
+      lowPrice: Math.min(a.activeSnapshot?.lowPrice ?? Infinity, b.activeSnapshot?.lowPrice ?? Infinity) || null,
+      medianDaysOnSite: awavg(a.activeSnapshot?.medianDaysOnSite, b.activeSnapshot?.medianDaysOnSite),
+    },
+    underContractCount: (a.underContractCount ?? 0) + (b.underContractCount ?? 0),
+    newListingsCurrent: (a.newListingsCurrent ?? 0) + (b.newListingsCurrent ?? 0),
+    newListingsLastMonth: (a.newListingsLastMonth ?? 0) + (b.newListingsLastMonth ?? 0),
+    newListingsLastYear: (a.newListingsLastYear ?? 0) + (b.newListingsLastYear ?? 0),
+    priceSegments: a.priceSegments,
+    activeBySegment,
+    soldBySegment,
+    soldByCalendarMonth,
+    saleToListTrend,
+  };
 }
 
 function buildReportList(states) {
@@ -84,7 +173,16 @@ export async function runBatch({ states, agent = {}, onProgress, collectData = f
 
     try {
       console.log(`[${i + 1}/${total}] Fetching: ${county}, ${state} — ${propertyType}`);
-      const data = await fetchMarketReport({ county, state, month, year, propertySubType: propertyType });
+      let data;
+      if (propertyType === "CondoTownhome") {
+        const [condoData, townhouseData] = await Promise.all([
+          fetchMarketReport({ county, state, month, year, propertySubType: "Condominium" }),
+          fetchMarketReport({ county, state, month, year, propertySubType: "Townhouse" }),
+        ]);
+        data = mergeMarketData(condoData, townhouseData);
+      } else {
+        data = await fetchMarketReport({ county, state, month, year, propertySubType: propertyType });
+      }
 
       // Breathing room before Anthropic API call
       await delay(2000);

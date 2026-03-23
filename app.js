@@ -124,7 +124,9 @@ app.post("/api/batch-generate", async (req, res) => {
     const indexHtml = generateIndex(results, { month, year, regionalPath });
     const pad = n => String(n).padStart(2, "0");
     const indexFile = `index-${pad(month)}-${year}.html`;
-    writeFileSync(resolve(__dirname, "reports", indexFile), indexHtml, "utf-8");
+    const reportsDir = resolve(__dirname, "reports");
+    mkdirSync(reportsDir, { recursive: true });
+    writeFileSync(resolve(reportsDir, indexFile), indexHtml, "utf-8");
     const indexPath = `reports/${indexFile}`;
 
     const succeeded = results.filter(r => r.status === "success");

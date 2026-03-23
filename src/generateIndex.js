@@ -7,8 +7,7 @@ const MONTH_NAMES = ["January","February","March","April","May","June",
 
 const TYPE_LABELS = {
   SingleFamilyResidence: "Single Family",
-  Condominium: "Condo",
-  Townhouse: "Townhouse",
+  CondoTownhome: "Condos/Townhomes",
 };
 
 export function generateIndex(batchResults, { month, year, regionalPath = null, indexUrl = null }) {

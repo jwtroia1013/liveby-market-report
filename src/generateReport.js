@@ -263,7 +263,9 @@ export function generateReport(data, analysis = null, agentOverride = null) {
           soldByCalendarMonth, saleToListTrend } = data;
 
   const monthName = MONTH_NAMES[month - 1];
-  const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence" : propertySubType;
+  const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence"
+    : propertySubType === "CondoTownhome" ? "Condos / Townhomes"
+    : propertySubType;
   const { branding } = config;
   const agent = agentOverride || config.agent;
 
