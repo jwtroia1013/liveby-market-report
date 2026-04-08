@@ -12,7 +12,7 @@ const REGIONS = [
   {
     name: "Western Connecticut/Gold Coast",
     state: "Connecticut",
-    counties: ["Western Connecticut"],
+    counties: ["Fairfield"],
   },
 ];
 
