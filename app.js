@@ -6,6 +6,7 @@ import { fetchMarketReport } from "./src/fetchData.js";
 import { generateReport } from "./src/generateReport.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
 import { runBatch } from "./src/batchRunner.js";
+import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./src/batchConfig.js";
 import { aggregateRegions } from "./src/regionalData.js";
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
 import { generateIndex } from "./src/generateIndex.js";
@@ -135,6 +136,64 @@ app.post("/api/batch-generate", async (req, res) => {
     send("done", { results, regionalPath, indexPath, succeeded: succeeded.length, failed: failed.length, month, year });
   } catch (err) {
     console.error("Batch generation error:", err);
+    send("error", { message: err.message });
+  } finally {
+    clearInterval(keepalive);
+    res.end();
+  }
+});
+
+app.post("/api/regional-overview", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+  const keepalive = setInterval(() => res.write(": ping\n\n"), 20000);
+
+  try {
+    const { month, year } = lastCompletedMonth();
+
+    // Build fetch list — SFR only across all regions
+    const allCounties = [
+      ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
+      ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
+      ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
+    ];
+
+    send("status", { message: `Fetching data for ${allCounties.length} counties…` });
+
+    const fetched = await Promise.all(
+      allCounties.map(({ county, state }) =>
+        fetchMarketReport({ county, state, month, year, propertySubType: "SingleFamilyResidence" })
+          .then(data => ({ status: "success", county, state, propertyType: "SingleFamilyResidence", data }))
+          .catch(err => {
+            console.error(`Failed to fetch ${county}, ${state}: ${err.message}`);
+            return { status: "error", county, state, propertyType: "SingleFamilyResidence", error: err.message };
+          })
+      )
+    );
+
+    const succeeded = fetched.filter(r => r.status === "success");
+    const failed = fetched.filter(r => r.status === "error");
+    if (failed.length) {
+      console.warn(`Regional overview: ${failed.length} counties failed to fetch`);
+    }
+
+    send("status", { message: "Aggregating regional data and generating narrative…" });
+    const regions = aggregateRegions(fetched);
+    if (!regions.length) throw new Error("No regional data could be aggregated.");
+
+    const regionalHtml = await generateRegionalReport(regions, { month, year });
+    const pad = n => String(n).padStart(2, "0");
+    const regionalFile = `Regional-Overview-${pad(month)}-${year}.html`;
+    const outputDir = resolve(__dirname, "reports");
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
+
+    send("done", { path: `reports/${regionalFile}`, succeeded: succeeded.length, failed: failed.length, month, year });
+  } catch (err) {
+    console.error("Regional overview error:", err);
     send("error", { message: err.message });
   } finally {
     clearInterval(keepalive);
