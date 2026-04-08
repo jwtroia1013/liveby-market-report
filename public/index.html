@@ -632,6 +632,17 @@
   <div class="batch-results" id="batch-results"></div>
 </div>
 
+<!-- ── QUARTERLY OVERVIEW CARD ── -->
+<div class="card-batch" style="margin-top:24px">
+  <div class="batch-title">Quarterly Regional Overview</div>
+  <p class="batch-subtitle">Fetch the previous full quarter's data across all regions and generate a quarterly Regional Overview — Q1 2026 when run in April 2026, etc.</p>
+
+  <div id="quarterly-status" style="display:none;margin:14px 0;font-size:13px;color:#555"></div>
+  <div id="quarterly-result" style="display:none;margin:14px 0"></div>
+
+  <button class="btn-primary" id="quarterly-btn" style="margin-top:8px">Generate Quarterly Overview</button>
+</div>
+
 <!-- ── REGIONAL OVERVIEW CARD ── -->
 <div class="card-batch" style="margin-top:24px">
   <div class="batch-title">Regional Overview Only</div>
@@ -978,6 +989,54 @@
     batchResults.innerHTML = html;
     batchResults.classList.add("visible");
   }
+
+  // ── Quarterly Overview ──
+  document.getElementById("quarterly-btn").addEventListener("click", async () => {
+    const btn      = document.getElementById("quarterly-btn");
+    const statusEl = document.getElementById("quarterly-status");
+    const resultEl = document.getElementById("quarterly-result");
+
+    btn.disabled = true;
+    statusEl.style.display = "block";
+    statusEl.textContent = "Starting…";
+    resultEl.style.display = "none";
+    resultEl.innerHTML = "";
+
+    try {
+      const res = await fetch("/api/quarterly-overview", { method: "POST" });
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.startsWith(": ")) continue;
+          if (!line.startsWith("data: ")) continue;
+          const event = JSON.parse(line.slice(6));
+
+          if (event.type === "status") {
+            statusEl.textContent = event.message;
+          } else if (event.type === "done") {
+            statusEl.textContent = `Done — Q${event.quarter} ${event.year} data fetched for ${event.succeeded} counties.`;
+            resultEl.style.display = "block";
+            resultEl.innerHTML = `<a href="${event.path}" target="_blank" style="color:var(--primary);font-weight:600">Open Q${event.quarter} ${event.year} Quarterly Overview →</a>`;
+          } else if (event.type === "error") {
+            throw new Error(event.message);
+          }
+        }
+      }
+    } catch (err) {
+      statusEl.textContent = "Error: " + err.message;
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   // ── Regional Overview Only ──
   document.getElementById("regional-btn").addEventListener("click", async () => {

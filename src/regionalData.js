@@ -111,3 +111,78 @@ export function aggregateRegions(batchResults) {
 
   return regionResults;
 }
+
+/**
+ * Aggregate quarterly fetch results into regional summaries.
+ *
+ * @param {object[]} countyResults - results from fetchQuarterlyData per county
+ * @returns {object[]} - array of quarterly region summary objects
+ */
+export function aggregateQuarterlyRegions(countyResults) {
+  const successful = countyResults.filter(r => r.current && r.prior);
+  const regionResults = [];
+
+  for (const region of REGIONS) {
+    const members = successful.filter(
+      r => r.state === region.state && region.counties.includes(r.county)
+    );
+    if (!members.length) continue;
+
+    function aggregatePeriodQ(field) {
+      let totalCount = 0, totalVolume = 0;
+      const medianPrices = [], medianDoms = [], ratios = [], ratioWeights = [];
+
+      for (const r of members) {
+        const p = r[field];
+        if (!p) continue;
+        totalCount  += p.count        ?? 0;
+        totalVolume += p.salesVolume  ?? 0;
+        if (p.medianSalePrice    != null) medianPrices.push(p.medianSalePrice);
+        if (p.medianDaysOnMarket != null) medianDoms.push(p.medianDaysOnMarket);
+        if (p.saleToListRatio    != null && p.count) {
+          ratios.push(p.saleToListRatio * p.count);
+          ratioWeights.push(p.count);
+        }
+      }
+
+      return {
+        count:               totalCount  || null,
+        salesVolume:         totalVolume || null,
+        medianPrice:         medianOfArray(medianPrices),
+        medianDaysOnMarket:  medianOfArray(medianDoms),
+        saleToListRatio:     ratioWeights.length
+          ? ratios.reduce((a, b) => a + b, 0) / ratioWeights.reduce((a, b) => a + b, 0)
+          : null,
+      };
+    }
+
+    const current = aggregatePeriodQ("current");
+    const prior   = aggregatePeriodQ("prior");
+
+    const totalActive        = members.reduce((s, r) => s + (r.activeSnapshot?.count      ?? 0), 0);
+    const totalUnderContract = members.reduce((s, r) => s + (r.underContractCount         ?? 0), 0);
+    const totalNewListings   = members.reduce((s, r) => s + (r.newListingsCurrent         ?? 0), 0);
+    const totalNewListingsPrior = members.reduce((s, r) => s + (r.newListingsPrior        ?? 0), 0);
+
+    // MOI uses monthly avg sales rate from the quarter (count / 3)
+    const moi = (totalActive && current.count) ? totalActive / (current.count / 3) : null;
+
+    regionResults.push({
+      name:   region.name,
+      state:  region.state,
+      counties: [...new Set(members.map(r => r.county))],
+      quarter: members[0].quarter,
+      year:    members[0].year,
+      current: { ...current, active: totalActive, underContract: totalUnderContract, newListings: totalNewListings, moi },
+      prior,
+      newListingsPrior: totalNewListingsPrior,
+      change: {
+        sales:       pctChange(current.count,       prior.count),
+        medianPrice: pctChange(current.medianPrice, prior.medianPrice),
+        newListings: pctChange(totalNewListings,    totalNewListingsPrior),
+      },
+    });
+  }
+
+  return regionResults;
+}
