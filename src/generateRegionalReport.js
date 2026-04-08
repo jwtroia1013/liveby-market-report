@@ -103,7 +103,7 @@ export async function generateRegionalReport(regions, { month, year }) {
         ${branding.company} <span style="color:${branding.accentColor}">|</span> ${branding.division}
       </div>
     </div>
-    <div style="font-size:0.7em;color:#888;margin-top:6px">Data sourced from ${config.mlsSources}. Information is deemed reliable but not guaranteed.</div>`;
+    <div style="font-size:0.7em;color:#888;margin-top:6px">Data is sourced from multiple MLS services across NY, NJ, and CT. Duplications and omissions may be present. Information is deemed reliable but not guaranteed.</div>`;
 
   return `<!DOCTYPE html>
 <html lang="en">
