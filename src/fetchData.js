@@ -45,10 +45,15 @@ function periodKey(year, month) {
   return `${year}-M${month}`;
 }
 
+// CT planning regions use boundary IDs instead of area-level-2 names
+const BOUNDARY_ID_RE = /^[0-9a-f]{24}$/i;
+
 export async function fetchMarketReport({ county, state, month, year, propertySubType = "SingleFamilyResidence" }) {
-  const countyEncoded = encodeURIComponent(county);
   const stateEncoded = encodeURIComponent(state);
-  const base = `area-level-2=${countyEncoded}&area-level-1=${stateEncoded}&property-type=Residential&property-sub-type=${propertySubType}`;
+  const areaParam = BOUNDARY_ID_RE.test(county)
+    ? `boundary-id=${county}`
+    : `area-level-2=${encodeURIComponent(county)}&area-level-1=${stateEncoded}`;
+  const base = `${areaParam}&property-type=Residential&property-sub-type=${propertySubType}`;
 
   // Compute all URL parameters synchronously before firing requests
   const start36 = addMonths(year, month, -35);

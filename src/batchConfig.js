@@ -12,7 +12,7 @@ export const BATCH_NJ = {
 
 export const BATCH_CT = {
   state: "Connecticut",
-  counties: ["Fairfield"],
+  counties: ["69a5effad74f79343900cdcd"], // Western Connecticut planning region boundary ID
   propertyTypes: ["SingleFamilyResidence", "CondoTownhome"]
 };
 

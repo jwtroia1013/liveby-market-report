@@ -12,7 +12,7 @@ const REGIONS = [
   {
     name: "Western Connecticut/Gold Coast",
     state: "Connecticut",
-    counties: ["Fairfield"],
+    counties: ["69a5effad74f79343900cdcd"], // Western Connecticut planning region boundary ID
   },
 ];
 
