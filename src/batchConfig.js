@@ -12,7 +12,7 @@ export const BATCH_NJ = {
 
 export const BATCH_CT = {
   state: "Connecticut",
-  counties: ["Western Connecticut"],
+  counties: ["Fairfield"],
   propertyTypes: ["SingleFamilyResidence", "CondoTownhome"]
 };
 
