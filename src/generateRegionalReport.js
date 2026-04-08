@@ -29,7 +29,7 @@ async function analyzeRegional(regions, month, year) {
 ${r.name} (${r.state}):
 - Counties: ${r.counties.join(", ")}
 - Homes Sold: ${r.current.count ?? "N/A"} (vs ${r.lastYear.count ?? "N/A"} last year, ${r.change.sales != null ? r.change.sales.toFixed(1) + "% YoY" : "N/A"})
-- Avg Sale Price: ${r.current.avgPrice ? "$" + Math.round(r.current.avgPrice).toLocaleString() : "N/A"} (vs ${r.lastYear.avgPrice ? "$" + Math.round(r.lastYear.avgPrice).toLocaleString() : "N/A"} last year)
+- Median Sale Price: ${r.current.medianPrice ? "$" + Math.round(r.current.medianPrice).toLocaleString() : "N/A"} (vs ${r.lastYear.medianPrice ? "$" + Math.round(r.lastYear.medianPrice).toLocaleString() : "N/A"} last year)
 - Active Listings: ${r.current.active ?? "N/A"}
 - Months of Inventory: ${r.current.moi != null ? r.current.moi.toFixed(1) : "N/A"}
 - New Listings: ${r.current.newListings ?? "N/A"} (vs ${r.newListingsLastYear ?? "N/A"} last year)
@@ -77,7 +77,7 @@ export async function generateRegionalReport(regions, { month, year }) {
       <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
       <td style="text-align:center;padding:7px 10px">${fmt(r.current[valueField], formatType)}</td>
       <td style="text-align:center;padding:7px 10px">${fmt(r.lastYear[valueField], formatType)}</td>
-      ${changeCell(r.change[valueField === "count" ? "sales" : valueField === "avgPrice" ? "avgPrice" : null])}
+      ${changeCell(r.change[valueField === "count" ? "sales" : valueField === "medianPrice" ? "medianPrice" : null])}
       <td style="text-align:center;padding:7px 10px">${fmt(r.ytd?.count, "number")}</td>
       <td style="text-align:center;padding:7px 10px">${fmt(r.priorYtd?.count, "number")}</td>
       ${changeCell(r.change.ytd)}
@@ -182,10 +182,10 @@ export async function generateRegionalReport(regions, { month, year }) {
     </tbody>
   </table>
 
-  <div class="section-title">Average Prices</div>
+  <div class="section-title">Median Sale Prices</div>
   <table>
-    ${tableHeader.replace(/YTD \d+/g, m => m).replace(/count/g, "avgPrice")}
-    <tbody>${regions.map(r => tableRow(r, "avgPrice", "currency")).join("")}</tbody>
+    ${tableHeader.replace(/YTD \d+/g, m => m).replace(/count/g, "medianPrice")}
+    <tbody>${regions.map(r => tableRow(r, "medianPrice", "currency")).join("")}</tbody>
   </table>
 
   <div class="spacer"></div>

@@ -102,6 +102,7 @@ export function aggregateRegions(batchResults) {
       change: {
         sales: pctChange(current.count, lastYear.count),
         avgPrice: pctChange(current.avgPrice, lastYear.avgPrice),
+        medianPrice: pctChange(current.medianPrice, lastYear.medianPrice),
         newListings: pctChange(totalNewListings, totalNewListingsLastYear),
         ytd: pctChange(totalYtd, totalPriorYtd),
       },
