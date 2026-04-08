@@ -9,6 +9,11 @@ const REGIONS = [
     state: "New Jersey",
     counties: ["Bergen", "Essex", "Hudson", "Hunterdon", "Middlesex", "Monmouth", "Morris", "Passaic", "Somerset", "Sussex", "Union", "Warren"],
   },
+  {
+    name: "Western Connecticut/Gold Coast",
+    state: "Connecticut",
+    counties: ["Western Connecticut"],
+  },
 ];
 
 function pctChange(current, prior) {
@@ -59,7 +64,7 @@ function aggregatePeriod(countyDataList, periodKey) {
  * @returns {object[]} - array of region summary objects
  */
 export function aggregateRegions(batchResults) {
-  const successful = batchResults.filter(r => r.status === "success" && r.data);
+  const successful = batchResults.filter(r => r.status === "success" && r.data && r.propertyType === "SingleFamilyResidence");
   const regionResults = [];
 
   for (const region of REGIONS) {

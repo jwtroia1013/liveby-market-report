@@ -142,7 +142,7 @@ app.post("/api/batch-generate", async (req, res) => {
   }
 });
 
-const STATE_DISPLAY = { NewYork: "New York", NewJersey: "New Jersey" };
+const STATE_DISPLAY = { NewYork: "New York", NewJersey: "New Jersey", Connecticut: "Connecticut" };
 const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 app.get("/reports/combined/:state", (req, res) => {

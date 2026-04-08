@@ -31,6 +31,13 @@ async function apiFetch(path) {
   if (!json.success) {
     throw new Error(`API error for ${url}: ${JSON.stringify(json)}`);
   }
+  // TEMP DEBUG: log full raw response for the first call to inspect available fields
+  if (!apiFetch._logged) {
+    apiFetch._logged = true;
+    console.log("=== RAW LIVEBY API RESPONSE (first call) ===");
+    console.log(JSON.stringify(json, null, 2).slice(0, 3000));
+    console.log("=== END RAW RESPONSE ===");
+  }
   return json.data;
 }
 

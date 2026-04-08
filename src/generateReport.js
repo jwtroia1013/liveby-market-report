@@ -388,7 +388,10 @@ export function generateReport(data, analysis = null, agentOverride = null) {
   `).join("");
 
   const page2Rows = buildPage2Table(data);
-  const disclaimer = `Data sourced from ${config.mlsSources}. Information is deemed reliable but not guaranteed. Report generated ${monthName} ${year}.`;
+  const mlsSource = state === "New Jersey" ? "NJMLS-New Jersey MLS"
+    : state === "Connecticut" ? "SmartMLS"
+    : "OneKey MLS";
+  const disclaimer = `Data sourced from ${mlsSource}. Information is deemed reliable but not guaranteed. Report generated ${monthName} ${year}.`;
 
   const agentLines = [
     agent.name ? `<strong>${agent.name}</strong>` : null,
@@ -855,7 +858,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
   <div style="display:flex;gap:14px;align-items:center;justify-content:center;margin-bottom:28px">
     <div style="flex:0 0 148px;border:1px solid #d8d4cc;border-top:3px solid ${branding.accentColor};border-radius:4px;padding:18px 14px;text-align:center">
       <div style="font-family:'Playfair Display',serif;font-size:38px;font-weight:700;color:${branding.primaryColor};line-height:1">
-        ${activeSnapshot.medianDaysOnSite ?? "—"}
+        ${currentPeriod?.medianDaysOnMarket ?? "—"}
       </div>
       <div style="font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:8px;line-height:1.4">
         Median Days<br>on Market

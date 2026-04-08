@@ -37,7 +37,7 @@ ${r.name} (${r.state}):
 - YTD Sales: ${r.ytd.count ?? "N/A"} (vs ${r.priorYtd.count ?? "N/A"} prior year)
 `.trim()).join("\n\n");
 
-  const prompt = `You are writing the "Regional Market Analysis" page of a monthly real estate report produced by Howard Hanna Rand Realty for ${monthName} ${year}. This page provides an executive overview comparing real estate conditions across the regions we serve.
+  const prompt = `You are writing the "Regional Market Analysis" page of a monthly real estate report produced by Howard Hanna Rand Realty for ${monthName} ${year}. This page provides an executive overview comparing single-family home market conditions across the regions we serve. All data in this report reflects single-family residential properties only — condos and townhomes are excluded. Make this clear early in the narrative.
 
 Here is the aggregated regional data:
 

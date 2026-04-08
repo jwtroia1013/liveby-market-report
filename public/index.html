@@ -499,6 +499,7 @@
       <option value="">— Select a state —</option>
       <option value="New York">New York</option>
       <option value="New Jersey">New Jersey</option>
+      <option value="Connecticut">Connecticut</option>
     </select>
   </div>
 
@@ -565,6 +566,10 @@
       <input type="checkbox" id="batch-nj" checked>
       <span class="check-label">New Jersey <span class="check-meta">12 counties</span></span>
     </label>
+    <label class="checkbox-item">
+      <input type="checkbox" id="batch-ct" checked>
+      <span class="check-label">Connecticut <span class="check-meta">1 planning region</span></span>
+    </label>
   </div>
 
   <div class="agent-label" style="margin-top:16px">Property Types</div>
@@ -580,7 +585,7 @@
   </div>
 
   <div style="margin:14px 0 18px;font-size:13px;color:#555" id="batch-report-count">
-    Total: <strong id="batch-count-num">40</strong> reports
+    Total: <strong id="batch-count-num">42</strong> reports
   </div>
 
   <div class="checkbox-group" style="margin-bottom:22px">
@@ -814,15 +819,16 @@
   let batchTimer = null;
 
   // Dynamic report count
-  const STATE_COUNTS = { ny: 8, nj: 12 };
+  const STATE_COUNTS = { ny: 8, nj: 12, ct: 1 };
   function updateBatchCount() {
     const states = (document.getElementById("batch-ny").checked ? STATE_COUNTS.ny : 0)
-                 + (document.getElementById("batch-nj").checked ? STATE_COUNTS.nj : 0);
+                 + (document.getElementById("batch-nj").checked ? STATE_COUNTS.nj : 0)
+                 + (document.getElementById("batch-ct").checked ? STATE_COUNTS.ct : 0);
     const types  = (document.getElementById("batch-sfr").checked ? 1 : 0)
                  + (document.getElementById("batch-condo").checked ? 1 : 0);
     document.getElementById("batch-count-num").textContent = states * types;
   }
-  ["batch-ny","batch-nj","batch-sfr","batch-condo"].forEach(id =>
+  ["batch-ny","batch-nj","batch-ct","batch-sfr","batch-condo"].forEach(id =>
     document.getElementById(id).addEventListener("change", updateBatchCount)
   );
 
@@ -830,6 +836,7 @@
     const states = [];
     if (document.getElementById("batch-ny").checked) states.push("New York");
     if (document.getElementById("batch-nj").checked) states.push("New Jersey");
+    if (document.getElementById("batch-ct").checked) states.push("Connecticut");
     if (!states.length) { alert("Select at least one state."); return; }
 
     const propertyTypes = [];

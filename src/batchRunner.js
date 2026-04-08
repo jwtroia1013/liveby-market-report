@@ -4,7 +4,7 @@ import { fileURLToPath } from "url";
 import { fetchMarketReport } from "./fetchData.js";
 import { analyzeMarket } from "./analyzeMarket.js";
 import { generateReport } from "./generateReport.js";
-import { BATCH_NY, BATCH_NJ } from "./batchConfig.js";
+import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./batchConfig.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -119,7 +119,7 @@ function mergeMarketData(a, b) {
 
 function buildReportList(states, propertyTypes = null) {
   const configs = [];
-  const stateMap = { "New York": BATCH_NY, "New Jersey": BATCH_NJ };
+  const stateMap = { "New York": BATCH_NY, "New Jersey": BATCH_NJ, "Connecticut": BATCH_CT };
   for (const state of states) {
     const batch = stateMap[state];
     if (!batch) {

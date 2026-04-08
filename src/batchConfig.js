@@ -10,6 +10,12 @@ export const BATCH_NJ = {
   propertyTypes: ["SingleFamilyResidence", "CondoTownhome"]
 };
 
+export const BATCH_CT = {
+  state: "Connecticut",
+  counties: ["Western Connecticut"],
+  propertyTypes: ["SingleFamilyResidence", "CondoTownhome"]
+};
+
 // Default agent info for batch runs (can be overridden via CLI or API)
 export const DEFAULT_AGENT = {
   name: "",
