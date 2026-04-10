@@ -42,7 +42,7 @@ function mergePeriod(a, b) {
   return {
     count,
     salesVolume,
-    medianSalePrice: salesVolume && count ? salesVolume / count : null,
+    medianSalePrice: wavg(a.medianSalePrice, b.medianSalePrice),
     medianListPrice: wavg(a.medianListPrice, b.medianListPrice),
     saleToListRatio: wavg(a.saleToListRatio, b.saleToListRatio),
     medianDaysOnMarket: wavg(a.medianDaysOnMarket, b.medianDaysOnMarket),
@@ -62,13 +62,13 @@ function mergeMarketData(a, b) {
 
   const saleToListTrend = a.saleToListTrend.map((aEntry, i) => {
     const bEntry = b.saleToListTrend[i];
-    const aCount = a.currentPeriod?.count ?? 1;
-    const bCount = b.currentPeriod?.count ?? 1;
+    const aCount = aEntry.count ?? 0;
+    const bCount = bEntry?.count ?? 0;
     const total = aCount + bCount;
-    const value = (aEntry.value != null || bEntry?.value != null)
+    const value = total > 0 && (aEntry.value != null || bEntry?.value != null)
       ? ((aEntry.value ?? 0) * aCount + (bEntry?.value ?? 0) * bCount) / total
       : null;
-    return { label: aEntry.label, shortLabel: aEntry.shortLabel, value };
+    return { label: aEntry.label, shortLabel: aEntry.shortLabel, value, count: total };
   });
 
   const activeBySegment = a.activeBySegment.map((aSeg, i) => {

@@ -133,6 +133,7 @@ export async function fetchMarketReport({ county, state, month, year, propertySu
       label: `${MONTH_ABBR[info.month - 1]} ${info.year}`,
       shortLabel: MONTH_ABBR[info.month - 1],
       value: entry?.data?.saleToListRatio ?? null,
+      count: entry?.data?.count ?? 0,
     };
   });
 
