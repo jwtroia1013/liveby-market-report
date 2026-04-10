@@ -65,7 +65,6 @@ CURRENT INVENTORY (live snapshot):
 - Active Listings: ${activeSnapshot?.count ?? "N/A"}
 - Homes Under Contract: ${underContractCount ?? "N/A"}
 - Median List Price (active): ${fmt$(activeSnapshot?.medianListPrice)}
-- Median Days on Site (active): ${activeSnapshot?.medianDaysOnSite ?? "N/A"} days
 - Price Range: ${fmt$(activeSnapshot?.lowPrice)} – ${fmt$(activeSnapshot?.highPrice)}
 `.trim();
 

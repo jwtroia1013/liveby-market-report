@@ -83,7 +83,12 @@ export function aggregateRegions(batchResults) {
     const totalNewListingsLastYear = countyDataList.reduce((s, r) => s + (r.data.newListingsLastYear ?? 0), 0);
     const totalYtd = countyDataList.reduce((s, r) => s + (r.data.ytdCount ?? 0), 0);
     const totalPriorYtd = countyDataList.reduce((s, r) => s + (r.data.priorYtdCount ?? 0), 0);
-    const moi = (totalActive && current.count) ? totalActive / current.count : null;
+    // MOI uses 3-month trailing average monthly sales rate
+    const trailingCounts = [0, 1, 2].map(i =>
+      countyDataList.reduce((s, r) => s + (r.data.threeMonthPeriods?.[i]?.count ?? 0), 0)
+    );
+    const trailingAvg = trailingCounts.reduce((a, b) => a + b, 0) / 3;
+    const moi = (totalActive && trailingAvg) ? totalActive / trailingAvg : null;
 
     const propertyTypes = [...new Set(countyDataList.map(r => r.propertyType))];
     const countyNames = [...new Set(countyDataList.map(r => r.county))];

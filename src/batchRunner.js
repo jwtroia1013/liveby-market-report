@@ -103,7 +103,6 @@ function mergeMarketData(a, b) {
       medianListPrice: awavg(a.activeSnapshot?.medianListPrice, b.activeSnapshot?.medianListPrice),
       highPrice: Math.max(a.activeSnapshot?.highPrice ?? 0, b.activeSnapshot?.highPrice ?? 0) || null,
       lowPrice: Math.min(a.activeSnapshot?.lowPrice ?? Infinity, b.activeSnapshot?.lowPrice ?? Infinity) || null,
-      medianDaysOnSite: awavg(a.activeSnapshot?.medianDaysOnSite, b.activeSnapshot?.medianDaysOnSite),
     },
     underContractCount: (a.underContractCount ?? 0) + (b.underContractCount ?? 0),
     newListingsCurrent: (a.newListingsCurrent ?? 0) + (b.newListingsCurrent ?? 0),

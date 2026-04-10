@@ -257,7 +257,7 @@ function svgGauge(moi) {
 
 export function generateReport(data, analysis = null, agentOverride = null) {
   const { county, state, month, year, propertySubType,
-          currentPeriod, lastMonthPeriod, lastYearPeriod,
+          currentPeriod, lastMonthPeriod, lastYearPeriod, threeMonthPeriods,
           ytdCount, lastMonthYtdCount, priorYtdCount, activeSnapshot, underContractCount,
           newListingsCurrent, newListingsLastMonth, newListingsLastYear,
           soldByCalendarMonth, saleToListTrend } = data;
@@ -376,7 +376,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
   const statCards = [
     { label: "Homes for Sale", value: fmt(activeSnapshot.count) },
     { label: "Median List Price", value: fmt(activeSnapshot.medianListPrice, "currency") },
-    { label: "Median Days on Market", value: fmt(activeSnapshot.medianDaysOnSite) },
+    { label: "Median Days on Market", value: fmt(currentPeriod?.medianDaysOnMarket) },
     { label: "Homes Under Contract", value: fmt(underContractCount) },
     { label: "High Price", value: fmt(activeSnapshot.highPrice, "currency") },
     { label: "Low Price", value: fmt(activeSnapshot.lowPrice, "currency") },
@@ -866,8 +866,12 @@ export function generateReport(data, analysis = null, agentOverride = null) {
     </div>
     <div style="flex:1;min-width:0;text-align:center">
       ${(() => {
-        const moi = (activeSnapshot.count && currentPeriod?.count)
-          ? activeSnapshot.count / currentPeriod.count
+        const trailingCounts = (threeMonthPeriods || []).map(p => p?.count ?? 0);
+        const trailingAvg = trailingCounts.length
+          ? trailingCounts.reduce((a, b) => a + b, 0) / trailingCounts.length
+          : currentPeriod?.count;
+        const moi = (activeSnapshot.count && trailingAvg)
+          ? activeSnapshot.count / trailingAvg
           : null;
         return `<div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#888;margin-bottom:4px">Balanced Market</div>
                 ${svgGauge(moi)}`;
