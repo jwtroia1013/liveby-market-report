@@ -3,7 +3,10 @@ import { mkdirSync, writeFileSync, readdirSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fetchMarketReport } from "./src/fetchData.js";
+import { fetchSnapshot } from "./src/fetchSnapshot.js";
 import { generateReport } from "./src/generateReport.js";
+import { generateSnapshot, renderScriptCards } from "./src/generateSnapshot.js";
+import { generateScripts } from "./src/generateScripts.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
 import { runBatch } from "./src/batchRunner.js";
 import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./src/batchConfig.js";
@@ -321,6 +324,84 @@ app.get("/reports/combined/:state", (req, res) => {
   ${bodyParts.join("\n")}
 </body>
 </html>`);
+});
+
+app.post("/api/snapshot", async (req, res) => {
+  const { areaType, area, state, propertySubType, agentName } = req.body;
+  if (!areaType || !area || !state || !propertySubType) {
+    return res.status(400).json({ error: "Missing required fields: areaType, area, state, propertySubType" });
+  }
+
+  const { month, year } = lastCompletedMonth();
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+
+  try {
+    send("status", { message: "Fetching market data from LiveBy…" });
+    const snapshot = await fetchSnapshot({ areaType, area, state, month, year, propertySubType });
+
+    send("status", { message: "Writing video scripts with AI…" });
+    const { scripts } = await generateScripts(snapshot, agentName || "");
+
+    send("status", { message: "Building your snapshot page…" });
+    const html = generateSnapshot(snapshot, scripts, agentName || "");
+
+    // Save HTML + JSON for re-run
+    const pad = n => String(n).padStart(2, "0");
+    const stateSlug = state.replace(/\s+/g, "");
+    const areaSlug  = area.replace(/\s+/g, "-");
+    const typeSlug  = propertySubType === "SingleFamilyResidence" ? "SFR"
+      : propertySubType === "CondoTownhome" ? "Condo"
+      : propertySubType;
+    const agentSlug = agentName ? `-${agentName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "")}` : "";
+    const base = `${areaSlug}-${typeSlug}${agentSlug}-${pad(month)}-${year}`;
+    const dir  = resolve(__dirname, "reports", "snapshots", stateSlug);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(resolve(dir, `${base}.html`), html, "utf-8");
+    writeFileSync(resolve(dir, `${base}.json`), JSON.stringify({ snapshot, agentName, scripts }, null, 2), "utf-8");
+
+    const path = `reports/snapshots/${stateSlug}/${base}.html`;
+    send("done", { path, month, year });
+  } catch (err) {
+    console.error("Snapshot error:", err);
+    send("error", { message: err.message });
+  } finally {
+    res.end();
+  }
+});
+
+app.post("/api/regen-scripts", async (req, res) => {
+  const { snapshot, agentName } = req.body;
+  if (!snapshot) return res.status(400).json({ error: "Missing snapshot data" });
+
+  try {
+    const { scripts } = await generateScripts(snapshot, agentName || "");
+    const scriptsHtml = renderScriptCards(scripts, agentName || "");
+
+    // Overwrite the saved files with new scripts
+    const { area, state, month, year, propertySubType } = snapshot;
+    const pad = n => String(n).padStart(2, "0");
+    const stateSlug = state.replace(/\s+/g, "");
+    const areaSlug  = area.replace(/\s+/g, "-");
+    const typeSlug  = propertySubType === "SingleFamilyResidence" ? "SFR"
+      : propertySubType === "CondoTownhome" ? "Condo"
+      : propertySubType;
+    const agentSlug = agentName ? `-${agentName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "")}` : "";
+    const base = `${areaSlug}-${typeSlug}${agentSlug}-${pad(month)}-${year}`;
+    const dir  = resolve(__dirname, "reports", "snapshots", stateSlug);
+    mkdirSync(dir, { recursive: true });
+    const updatedHtml = generateSnapshot(snapshot, scripts, agentName || "");
+    writeFileSync(resolve(dir, `${base}.html`), updatedHtml, "utf-8");
+    writeFileSync(resolve(dir, `${base}.json`), JSON.stringify({ snapshot, agentName, scripts }, null, 2), "utf-8");
+
+    res.json({ scriptsHtml });
+  } catch (err) {
+    console.error("Regen scripts error:", err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.listen(PORT, () => {
