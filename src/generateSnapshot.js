@@ -37,6 +37,7 @@ function scriptCards(scripts, agentName) {
         <span class="script-num">${i + 1}</span>
         <div>
           <div class="script-metric">${s.metric}</div>
+          ${s.audience ? `<div class="script-audience">Audience: ${s.audience}</div>` : ""}
           <div class="script-hook">Hook: <strong>${s.hook_framework}</strong> — ${s.hook_rationale}</div>
         </div>
       </div>
@@ -110,6 +111,7 @@ export function generateSnapshot(snapshot, scripts, agentName) {
     .script-num { background: #1a4a3a; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 13px; flex-shrink: 0; margin-top: 2px; }
     .script-metric { font-weight: 700; font-size: 15px; color: #1a4a3a; }
     .script-hook { font-size: 12px; color: #666; margin-top: 3px; }
+    .script-audience { font-size: 11px; color: #c8963e; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
     .script-body { padding: 18px 20px; line-height: 1.7; font-size: 14px; color: #333; white-space: pre-wrap; }
 
     .agent-line { font-size: 12px; color: #999; text-align: right; margin-top: -10px; margin-bottom: 18px; }
