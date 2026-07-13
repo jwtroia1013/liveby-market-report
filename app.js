@@ -325,6 +325,7 @@ app.post("/api/quarterly-county-overview", async (req, res) => {
       title: "Quarterly County Overview",
       analysisTitle: "Quarterly County Analysis",
       layout: "paged",
+      analysisFirst: true,
     });
 
     const filename = `Quarterly-County-Overview-Q${quarter}-${year}.html`;

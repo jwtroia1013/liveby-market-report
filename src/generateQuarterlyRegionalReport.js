@@ -78,6 +78,8 @@ export async function generateQuarterlyRegionalReport(regions, {
   analysisTitle = "Quarterly Regional Analysis",
   // "single" puts all four tables on one page; "paged" gives each its own page.
   layout = "single",
+  // Lead with the commentary rather than closing on it.
+  analysisFirst = false,
 } = {}) {
   const { branding } = config;
   const label      = `Q${quarter} ${year}`;
@@ -203,6 +205,27 @@ export async function generateQuarterlyRegionalReport(regions, {
     ? `${regions.length} ${pluralize(rowLabel.toLowerCase())} across ${[...new Set(regions.map(r => r.state))].join(", ")}`
     : regions.map(r => r.name).join(" &bull; ");
 
+  const analysisPage = `
+<!-- Quarterly Analysis -->
+<div class="page">
+  <div class="page-header">
+    <div class="header-title">${analysisTitle}</div>
+    <div class="header-sub">${label} &bull; Prepared for Howard Hanna Rand Realty</div>
+  </div>
+
+  <div class="section-title">Market Commentary</div>
+  <div style="font-size:0.8em;color:#888;margin-bottom:20px;font-style:italic">
+    ${subtitleScope} &bull; ${label} vs ${priorLabel}
+  </div>
+
+  <div class="analysis-body${layout === "paged" ? " dense" : ""}">
+    ${analysis.split(/\n\n+/).filter(p => p.trim()).map(p => `<p>${p.trim()}</p>`).join("\n    ")}
+  </div>
+
+  <div class="spacer"></div>
+  ${footer}
+</div>`;
+
   const dataPages = layout === "paged"
     ? tables.map(t => `
 <div class="page">${pageHeader}
@@ -279,29 +302,10 @@ ${tables.map(t => `
   <button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 </div>
 
+${analysisFirst ? analysisPage : ""}
 <!-- DATA TABLES -->
 ${dataPages}
-
-<!-- FINAL PAGE: Quarterly Analysis -->
-<div class="page">
-  <div class="page-header">
-    <div class="header-title">${analysisTitle}</div>
-    <div class="header-sub">${label} &bull; Prepared for Howard Hanna Rand Realty</div>
-  </div>
-
-  <div class="section-title">Market Commentary</div>
-  <div style="font-size:0.8em;color:#888;margin-bottom:20px;font-style:italic">
-    ${subtitleScope} &bull; ${label} vs ${priorLabel}
-  </div>
-
-  <div class="analysis-body${layout === "paged" ? " dense" : ""}">
-    ${analysis.split(/\n\n+/).filter(p => p.trim()).map(p => `<p>${p.trim()}</p>`).join("\n    ")}
-  </div>
-
-  <div class="spacer"></div>
-  ${footer}
-</div>
-
+${analysisFirst ? "" : analysisPage}
 </body>
 </html>`;
 }
