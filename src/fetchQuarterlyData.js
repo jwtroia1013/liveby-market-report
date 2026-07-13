@@ -16,6 +16,28 @@ function areaParams(county, state) {
     : `area-level-2=${encodeURIComponent(county)}&area-level-1=${encodeURIComponent(state)}`;
 }
 
+/**
+ * Area params covering every county in a region at once.
+ *
+ * The API accepts repeated area-level-2 values and returns a single true aggregate
+ * over the combined set — the region's actual median, not a median of county medians.
+ */
+function regionAreaParams(region) {
+  const boundaryIds = region.counties.filter(c => BOUNDARY_ID_RE.test(c));
+  const names       = region.counties.filter(c => !BOUNDARY_ID_RE.test(c));
+
+  if (boundaryIds.length && !names.length) {
+    return boundaryIds.map(id => `boundary-id=${id}`).join("&");
+  }
+  if (boundaryIds.length) {
+    throw new Error(`Region "${region.name}" mixes boundary IDs and county names, which cannot be combined in one query.`);
+  }
+  return [
+    ...names.map(c => `area-level-2=${encodeURIComponent(c)}`),
+    `area-level-1=${encodeURIComponent(region.state)}`,
+  ].join("&");
+}
+
 async function apiFetch(path) {
   const url = `${BASE_URL}${path}`;
 
@@ -66,6 +88,52 @@ function extractPeriod(data) {
     salesVolume:         d.ClosePrice?.sum      ?? null,
     medianDaysOnMarket:  d.DaysOnMarket?.median ?? null,
     saleToListRatio:     d.saleToListRatio      ?? null,
+  };
+}
+
+/**
+ * Fetch a whole region in one set of queries, letting the API aggregate.
+ *
+ * This replaces summing/median-ing per-county results: LiveBy computes the median,
+ * days on market and sale-to-list ratio over the region's combined sales, which is
+ * the true regional figure rather than an approximation of it.
+ */
+export async function fetchQuarterlyRegion({ region, quarter, year, propertySubType = "SingleFamilyResidence" }) {
+  const area = regionAreaParams(region);
+  const base = `${area}&property-type=Residential&property-sub-type=${propertySubType}`;
+
+  const currentInterval = quarterInterval(quarter, year);
+  const priorInterval   = quarterInterval(quarter, year - 1);
+
+  const [
+    currentSold, priorSold,
+    activeData, contractData,
+    newListingsCurrent, newListingsPrior,
+  ] = await Promise.all([
+    apiFetch(`/v4/market-statistics?time-interval=${currentInterval}&${base}`),
+    apiFetch(`/v4/market-statistics?time-interval=${priorInterval}&${base}`),
+    apiFetch(`/v4/market-statistics/active?${base}&status=Active`),
+    apiFetch(`/v4/market-statistics/active?${base}&status=Pending&status=ActiveUnderContract`),
+    apiFetch(`/v4/market-statistics/added-to-market?time-interval=${currentInterval}&${base}`),
+    apiFetch(`/v4/market-statistics/added-to-market?time-interval=${priorInterval}&${base}`),
+  ]);
+
+  return {
+    name:     region.name,
+    state:    region.state,
+    counties: region.counties,
+    quarter,
+    year,
+    propertySubType,
+    current:            extractPeriod(currentSold),
+    prior:              extractPeriod(priorSold),
+    activeSnapshot: {
+      count:           activeData[0]?.data?.count             ?? 0,
+      medianListPrice: activeData[0]?.data?.ListPrice?.median ?? null,
+    },
+    underContractCount:   contractData[0]?.data?.count       ?? 0,
+    newListingsCurrent:   newListingsCurrent[0]?.data?.count ?? 0,
+    newListingsPrior:     newListingsPrior[0]?.data?.count   ?? 0,
   };
 }
 

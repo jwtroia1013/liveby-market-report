@@ -10,8 +10,8 @@ import { generateScripts } from "./src/generateScripts.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
 import { runBatch } from "./src/batchRunner.js";
 import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./src/batchConfig.js";
-import { aggregateRegions, aggregateQuarterlyRegions, buildQuarterlyCountyRows } from "./src/regionalData.js";
-import { fetchQuarterlyData, previousQuarter } from "./src/fetchQuarterlyData.js";
+import { aggregateRegions, buildQuarterlyRegionRows, buildQuarterlyCountyRows, REGIONS } from "./src/regionalData.js";
+import { fetchQuarterlyData, fetchQuarterlyRegion, previousQuarter } from "./src/fetchQuarterlyData.js";
 import { generateQuarterlyRegionalReport } from "./src/generateQuarterlyRegionalReport.js";
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
 import { generateIndex } from "./src/generateIndex.js";
@@ -231,19 +231,15 @@ app.post("/api/quarterly-overview", async (req, res) => {
   try {
     const { quarter, year } = previousQuarter();
 
-    const allCounties = [
-      ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
-      ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
-      ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
-    ];
+    send("status", { message: `Fetching Q${quarter} ${year} data for ${REGIONS.length} regions…` });
 
-    send("status", { message: `Fetching Q${quarter} ${year} data for ${allCounties.length} counties…` });
-
+    // Each region is fetched as a single combined area, so the API returns the region's
+    // true median rather than us approximating one from the county medians.
     const results = await Promise.all(
-      allCounties.map(({ county, state }) =>
-        fetchQuarterlyData({ county, state, quarter, year, propertySubType: "SingleFamilyResidence" })
+      REGIONS.map(region =>
+        fetchQuarterlyRegion({ region, quarter, year, propertySubType: "SingleFamilyResidence" })
           .catch(err => {
-            console.error(`Failed quarterly fetch for ${county}, ${state}: ${err.message}`);
+            console.error(`Failed quarterly fetch for region ${region.name}: ${err.message}`);
             return null;
           })
       )
@@ -251,14 +247,13 @@ app.post("/api/quarterly-overview", async (req, res) => {
 
     const valid = results.filter(Boolean);
     const failed = results.length - valid.length;
-    if (failed) console.warn(`Quarterly overview: ${failed} counties failed`);
+    if (failed) console.warn(`Quarterly overview: ${failed} regions failed`);
 
-    send("status", { message: "Aggregating regions and generating narrative…" });
-    const regions = aggregateQuarterlyRegions(valid);
-    if (!regions.length) throw new Error("No regional data could be aggregated.");
+    send("status", { message: "Generating narrative…" });
+    const regions = buildQuarterlyRegionRows(valid);
+    if (!regions.length) throw new Error("No regional data could be fetched.");
 
     const html = await generateQuarterlyRegionalReport(regions, { quarter, year });
-    const pad = n => String(n).padStart(2, "0");
     const filename = `Quarterly-Overview-Q${quarter}-${year}.html`;
     const outputDir = REPORTS_DIR;
     mkdirSync(outputDir, { recursive: true });

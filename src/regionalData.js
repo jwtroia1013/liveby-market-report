@@ -1,4 +1,4 @@
-const REGIONS = [
+export const REGIONS = [
   {
     name: "Westchester & Hudson Valley",
     state: "New York",
@@ -123,78 +123,63 @@ export function aggregateRegions(batchResults) {
 }
 
 /**
- * Aggregate quarterly fetch results into regional summaries.
- *
- * @param {object[]} countyResults - results from fetchQuarterlyData per county
- * @returns {object[]} - array of quarterly region summary objects
+ * Shape one quarterly fetch result — a whole region or a single county — into the
+ * row the report generator renders. Both come back from the API in the same form,
+ * so the same mapping serves both reports.
  */
-export function aggregateQuarterlyRegions(countyResults) {
-  const successful = countyResults.filter(r => r.current && r.prior);
-  const regionResults = [];
+function toQuarterlyRow(r, { name, group }) {
+  const active        = r.activeSnapshot?.count ?? 0;
+  const underContract = r.underContractCount    ?? 0;
+  const newListings   = r.newListingsCurrent    ?? 0;
+  // MOI uses the quarter's average monthly sales rate.
+  const moi = (active && r.current.count) ? active / (r.current.count / 3) : null;
 
-  for (const region of REGIONS) {
-    const members = successful.filter(
-      r => r.state === region.state && region.counties.includes(r.county)
-    );
-    if (!members.length) continue;
+  return {
+    name,
+    state: r.state,
+    group,
+    counties: r.counties,
+    quarter: r.quarter,
+    year:    r.year,
+    current: {
+      count:              r.current.count,
+      salesVolume:        r.current.salesVolume,
+      medianPrice:        r.current.medianSalePrice,
+      medianDaysOnMarket: r.current.medianDaysOnMarket,
+      saleToListRatio:    r.current.saleToListRatio,
+      active,
+      underContract,
+      newListings,
+      moi,
+    },
+    prior: {
+      count:              r.prior.count,
+      salesVolume:        r.prior.salesVolume,
+      medianPrice:        r.prior.medianSalePrice,
+      medianDaysOnMarket: r.prior.medianDaysOnMarket,
+      saleToListRatio:    r.prior.saleToListRatio,
+    },
+    newListingsPrior: r.newListingsPrior ?? 0,
+    change: {
+      sales:       pctChange(r.current.count,           r.prior.count),
+      medianPrice: pctChange(r.current.medianSalePrice, r.prior.medianSalePrice),
+      newListings: pctChange(r.newListingsCurrent,      r.newListingsPrior),
+    },
+  };
+}
 
-    function aggregatePeriodQ(field) {
-      let totalCount = 0, totalVolume = 0;
-      const medianPrices = [], medianDoms = [], ratios = [], ratioWeights = [];
-
-      for (const r of members) {
-        const p = r[field];
-        if (!p) continue;
-        totalCount  += p.count        ?? 0;
-        totalVolume += p.salesVolume  ?? 0;
-        if (p.medianSalePrice    != null) medianPrices.push(p.medianSalePrice);
-        if (p.medianDaysOnMarket != null) medianDoms.push(p.medianDaysOnMarket);
-        if (p.saleToListRatio    != null && p.count) {
-          ratios.push(p.saleToListRatio * p.count);
-          ratioWeights.push(p.count);
-        }
-      }
-
-      return {
-        count:               totalCount  || null,
-        salesVolume:         totalVolume || null,
-        medianPrice:         medianOfArray(medianPrices),
-        medianDaysOnMarket:  medianOfArray(medianDoms),
-        saleToListRatio:     ratioWeights.length
-          ? ratios.reduce((a, b) => a + b, 0) / ratioWeights.reduce((a, b) => a + b, 0)
-          : null,
-      };
-    }
-
-    const current = aggregatePeriodQ("current");
-    const prior   = aggregatePeriodQ("prior");
-
-    const totalActive        = members.reduce((s, r) => s + (r.activeSnapshot?.count      ?? 0), 0);
-    const totalUnderContract = members.reduce((s, r) => s + (r.underContractCount         ?? 0), 0);
-    const totalNewListings   = members.reduce((s, r) => s + (r.newListingsCurrent         ?? 0), 0);
-    const totalNewListingsPrior = members.reduce((s, r) => s + (r.newListingsPrior        ?? 0), 0);
-
-    // MOI uses monthly avg sales rate from the quarter (count / 3)
-    const moi = (totalActive && current.count) ? totalActive / (current.count / 3) : null;
-
-    regionResults.push({
-      name:   region.name,
-      state:  region.state,
-      counties: [...new Set(members.map(r => r.county))],
-      quarter: members[0].quarter,
-      year:    members[0].year,
-      current: { ...current, active: totalActive, underContract: totalUnderContract, newListings: totalNewListings, moi },
-      prior,
-      newListingsPrior: totalNewListingsPrior,
-      change: {
-        sales:       pctChange(current.count,       prior.count),
-        medianPrice: pctChange(current.medianPrice, prior.medianPrice),
-        newListings: pctChange(totalNewListings,    totalNewListingsPrior),
-      },
-    });
-  }
-
-  return regionResults;
+/**
+ * Build region rows from whole-region fetches (see fetchQuarterlyRegion).
+ *
+ * These figures are the API's own aggregates over each region's combined sales.
+ * They are NOT derived from the county numbers: a median cannot be summed or
+ * averaged, so the previous median-of-county-medians understated regions whose
+ * sales are concentrated in their most expensive county.
+ */
+export function buildQuarterlyRegionRows(regionResults) {
+  return regionResults
+    .filter(r => r && r.current && r.prior)
+    .map(r => toQuarterlyRow(r, { name: r.name, group: undefined }));
 }
 
 /**
@@ -218,42 +203,10 @@ export function buildQuarterlyCountyRows(countyResults) {
       const r = successful.find(x => x.state === region.state && x.county === county);
       if (!r) continue;
 
-      const active        = r.activeSnapshot?.count ?? 0;
-      const underContract = r.underContractCount    ?? 0;
-      const newListings   = r.newListingsCurrent    ?? 0;
-      const moi = (active && r.current.count) ? active / (r.current.count / 3) : null;
-
-      rows.push({
+      rows.push(toQuarterlyRow(r, {
         name:  COUNTY_DISPLAY_NAMES[county] ?? county,
-        state: region.state,
         group: region.state,
-        quarter: r.quarter,
-        year:    r.year,
-        current: {
-          count:              r.current.count,
-          salesVolume:        r.current.salesVolume,
-          medianPrice:        r.current.medianSalePrice,
-          medianDaysOnMarket: r.current.medianDaysOnMarket,
-          saleToListRatio:    r.current.saleToListRatio,
-          active,
-          underContract,
-          newListings,
-          moi,
-        },
-        prior: {
-          count:              r.prior.count,
-          salesVolume:        r.prior.salesVolume,
-          medianPrice:        r.prior.medianSalePrice,
-          medianDaysOnMarket: r.prior.medianDaysOnMarket,
-          saleToListRatio:    r.prior.saleToListRatio,
-        },
-        newListingsPrior: r.newListingsPrior ?? 0,
-        change: {
-          sales:       pctChange(r.current.count,           r.prior.count),
-          medianPrice: pctChange(r.current.medianSalePrice, r.prior.medianSalePrice),
-          newListings: pctChange(r.newListingsCurrent,      r.newListingsPrior),
-        },
-      });
+      }));
     }
   }
 
