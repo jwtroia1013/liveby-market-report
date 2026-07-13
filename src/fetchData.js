@@ -47,6 +47,94 @@ function periodKey(year, month) {
 // CT planning regions use boundary IDs instead of area-level-2 names
 const BOUNDARY_ID_RE = /^[0-9a-f]{24}$/i;
 
+/**
+ * Area params covering every county in a region at once.
+ *
+ * The API accepts repeated area-level-2 values and aggregates over the combined set,
+ * so medians come back as the region's true median rather than a median of medians.
+ */
+function regionAreaParams(region) {
+  const boundaryIds = region.counties.filter(c => BOUNDARY_ID_RE.test(c));
+  const names       = region.counties.filter(c => !BOUNDARY_ID_RE.test(c));
+
+  if (boundaryIds.length && !names.length) {
+    return boundaryIds.map(id => `boundary-id=${id}`).join("&");
+  }
+  if (boundaryIds.length) {
+    throw new Error(`Region "${region.name}" mixes boundary IDs and county names, which cannot be combined in one query.`);
+  }
+  return [
+    ...names.map(c => `area-level-2=${encodeURIComponent(c)}`),
+    `area-level-1=${encodeURIComponent(region.state)}`,
+  ].join("&");
+}
+
+/**
+ * Fetch a whole region for the monthly Regional Overview in one set of queries.
+ *
+ * Only the fields the regional report actually renders are fetched — the price
+ * segments and 36-month chart series that the per-county report needs are not.
+ */
+export async function fetchMonthlyRegion({ region, month, year, propertySubType = "SingleFamilyResidence" }) {
+  const base = `${regionAreaParams(region)}&property-type=Residential&property-sub-type=${propertySubType}`;
+
+  const start36 = addMonths(year, month, -35);
+  const next    = addMonths(year, month, 1);
+  const interval36 = `${firstOfMonth(start36.year, start36.month)}/${firstOfMonth(next.year, next.month)}`;
+
+  const ytdInterval      = `${year}-01-01/${firstOfMonth(next.year, next.month)}`;
+  const priorEndYear     = month + 1 > 12 ? year : year - 1;
+  const priorYtdInterval = `${year - 1}-01-01/${firstOfMonth(priorEndYear, next.month)}`;
+
+  const [soldMonthly, addedToMarket, ytdData, priorYtdData, activeData, contractData] = await Promise.all([
+    apiFetch(`/v4/market-statistics?time-interval=${interval36}&${base}&group-by=month`),
+    apiFetch(`/v4/market-statistics/added-to-market?time-interval=${interval36}&${base}&group-by=month`),
+    apiFetch(`/v4/market-statistics?time-interval=${ytdInterval}&${base}`),
+    apiFetch(`/v4/market-statistics?time-interval=${priorYtdInterval}&${base}`),
+    apiFetch(`/v4/market-statistics/active?${base}&status=Active`),
+    apiFetch(`/v4/market-statistics/active?${base}&status=Pending&status=ActiveUnderContract`),
+  ]);
+
+  const currentKey   = periodKey(year, month);
+  const lastYearInfo = addMonths(year, month, -12);
+  const lastYearKey  = periodKey(lastYearInfo.year, lastYearInfo.month);
+
+  const findPeriod = (data, key) => data.find(d => d.period === key) || null;
+  const extract = (p) => {
+    if (!p) return null;
+    const d = p.data;
+    return {
+      count:              d.count,
+      medianSalePrice:    d.ClosePrice?.median,
+      salesVolume:        d.ClosePrice?.sum,
+      medianDaysOnMarket: d.DaysOnMarket?.median,
+      saleToListRatio:    d.saleToListRatio,
+    };
+  };
+
+  return {
+    name:     region.name,
+    state:    region.state,
+    counties: region.counties,
+    month,
+    year,
+    propertySubType,
+    current:  extract(findPeriod(soldMonthly, currentKey)),
+    lastYear: extract(findPeriod(soldMonthly, lastYearKey)),
+    // MOI uses the 3-month trailing average monthly sales rate.
+    threeMonthPeriods: [-2, -1, 0].map(delta => {
+      const info = addMonths(year, month, delta);
+      return extract(findPeriod(soldMonthly, periodKey(info.year, info.month)));
+    }),
+    ytdCount:      ytdData[0]?.data?.count      ?? 0,
+    priorYtdCount: priorYtdData[0]?.data?.count ?? 0,
+    activeCount:        activeData[0]?.data?.count   ?? 0,
+    underContractCount: contractData[0]?.data?.count ?? 0,
+    newListingsCurrent:  findPeriod(addedToMarket, currentKey)?.data?.count  ?? 0,
+    newListingsLastYear: findPeriod(addedToMarket, lastYearKey)?.data?.count ?? 0,
+  };
+}
+
 export async function fetchMarketReport({ county, state, month, year, propertySubType = "SingleFamilyResidence" }) {
   const stateEncoded = encodeURIComponent(state);
   const areaParam = BOUNDARY_ID_RE.test(county)

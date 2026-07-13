@@ -2,7 +2,7 @@ import express from "express";
 import { mkdirSync, writeFileSync, readdirSync, readFileSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
-import { fetchMarketReport } from "./src/fetchData.js";
+import { fetchMarketReport, fetchMonthlyRegion } from "./src/fetchData.js";
 import { fetchSnapshot } from "./src/fetchSnapshot.js";
 import { generateReport } from "./src/generateReport.js";
 import { generateSnapshot, renderScriptCards } from "./src/generateSnapshot.js";
@@ -10,7 +10,7 @@ import { generateScripts } from "./src/generateScripts.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
 import { runBatch } from "./src/batchRunner.js";
 import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./src/batchConfig.js";
-import { aggregateRegions, buildQuarterlyRegionRows, buildQuarterlyCountyRows, REGIONS } from "./src/regionalData.js";
+import { buildMonthlyRegionRows, buildQuarterlyRegionRows, buildQuarterlyCountyRows, REGIONS } from "./src/regionalData.js";
 import { fetchQuarterlyData, fetchQuarterlyRegion, previousQuarter } from "./src/fetchQuarterlyData.js";
 import { generateQuarterlyRegionalReport } from "./src/generateQuarterlyRegionalReport.js";
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
@@ -128,7 +128,18 @@ app.post("/api/batch-generate", async (req, res) => {
       const successWithData = results.filter(r => r.status === "success" && r.data);
       if (successWithData.length > 0) {
         send("status", { message: "Generating Regional Overview…" });
-        const regions = aggregateRegions(successWithData);
+        // Fetched separately from the per-county reports: a region's median has to come
+        // from the API's own aggregate, it cannot be derived from the county figures.
+        const regionFetches = await Promise.all(
+          REGIONS.map(region =>
+            fetchMonthlyRegion({ region, month, year, propertySubType: "SingleFamilyResidence" })
+              .catch(err => {
+                console.error(`Failed to fetch region ${region.name}: ${err.message}`);
+                return null;
+              })
+          )
+        );
+        const regions = buildMonthlyRegionRows(regionFetches.filter(Boolean));
         if (regions.length > 0) {
           const regionalHtml = await generateRegionalReport(regions, { month, year });
           const pad = n => String(n).padStart(2, "0");
@@ -173,35 +184,26 @@ app.post("/api/regional-overview", async (req, res) => {
   try {
     const { month, year } = lastCompletedMonth();
 
-    // Build fetch list — SFR only across all regions
-    const allCounties = [
-      ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
-      ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
-      ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
-    ];
+    send("status", { message: `Fetching data for ${REGIONS.length} regions…` });
 
-    send("status", { message: `Fetching data for ${allCounties.length} counties…` });
-
+    // Each region is fetched as one combined area so the API returns its true median.
     const fetched = await Promise.all(
-      allCounties.map(({ county, state }) =>
-        fetchMarketReport({ county, state, month, year, propertySubType: "SingleFamilyResidence" })
-          .then(data => ({ status: "success", county, state, propertyType: "SingleFamilyResidence", data }))
+      REGIONS.map(region =>
+        fetchMonthlyRegion({ region, month, year, propertySubType: "SingleFamilyResidence" })
           .catch(err => {
-            console.error(`Failed to fetch ${county}, ${state}: ${err.message}`);
-            return { status: "error", county, state, propertyType: "SingleFamilyResidence", error: err.message };
+            console.error(`Failed to fetch region ${region.name}: ${err.message}`);
+            return null;
           })
       )
     );
 
-    const succeeded = fetched.filter(r => r.status === "success");
-    const failed = fetched.filter(r => r.status === "error");
-    if (failed.length) {
-      console.warn(`Regional overview: ${failed.length} counties failed to fetch`);
-    }
+    const valid = fetched.filter(Boolean);
+    const failed = fetched.length - valid.length;
+    if (failed) console.warn(`Regional overview: ${failed} regions failed to fetch`);
 
-    send("status", { message: "Aggregating regional data and generating narrative…" });
-    const regions = aggregateRegions(fetched);
-    if (!regions.length) throw new Error("No regional data could be aggregated.");
+    send("status", { message: "Generating narrative…" });
+    const regions = buildMonthlyRegionRows(valid);
+    if (!regions.length) throw new Error("No regional data could be fetched.");
 
     const regionalHtml = await generateRegionalReport(regions, { month, year });
     const pad = n => String(n).padStart(2, "0");
@@ -210,7 +212,7 @@ app.post("/api/regional-overview", async (req, res) => {
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
 
-    send("done", { path: `reports/${regionalFile}`, succeeded: succeeded.length, failed: failed.length, month, year });
+    send("done", { path: `reports/${regionalFile}`, succeeded: valid.length, failed, month, year });
   } catch (err) {
     console.error("Regional overview error:", err);
     send("error", { message: err.message });
