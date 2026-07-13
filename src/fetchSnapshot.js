@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import { cacheGet, cacheSet } from "./cache.js";
 const require = createRequire(import.meta.url);
 const config = require("../config.json");
 
@@ -17,6 +18,10 @@ function periodKey(year, month) { return `${year}-M${month}`; }
 
 async function apiFetch(path) {
   const url = `${BASE_URL}${path}`;
+
+  const cached = cacheGet(url);
+  if (cached) return cached;
+
   const res = await fetch(url, { headers });
   if (!res.ok) {
     const text = await res.text();
@@ -24,6 +29,7 @@ async function apiFetch(path) {
   }
   const json = await res.json();
   if (!json.success) throw new Error(`API error for ${url}: ${JSON.stringify(json)}`);
+  cacheSet(url, json.data);
   return json.data;
 }
 

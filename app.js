@@ -15,14 +15,19 @@ import { fetchQuarterlyData, previousQuarter } from "./src/fetchQuarterlyData.js
 import { generateQuarterlyRegionalReport } from "./src/generateQuarterlyRegionalReport.js";
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
 import { generateIndex } from "./src/generateIndex.js";
+import { DATA_DIR, cacheStats, cacheClear } from "./src/cache.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Reports live on the Railway volume in production so they survive redeploys.
+const REPORTS_DIR = resolve(DATA_DIR, "reports");
+mkdirSync(REPORTS_DIR, { recursive: true });
+
 app.use(express.json());
 app.use(express.static(resolve(__dirname, "public")));
-app.use("/reports", express.static(resolve(__dirname, "reports")));
+app.use("/reports", express.static(REPORTS_DIR));
 
 // Determine last completed month from today's date
 function lastCompletedMonth() {
@@ -35,6 +40,15 @@ function lastCompletedMonth() {
 
 app.get("/api/current-period", (req, res) => {
   res.json(lastCompletedMonth());
+});
+
+app.get("/api/cache", (req, res) => {
+  const { entries, bytes } = cacheStats();
+  res.json({ dataDir: DATA_DIR, entries, kb: Math.round(bytes / 1024) });
+});
+
+app.delete("/api/cache", (req, res) => {
+  res.json({ cleared: cacheClear() });
 });
 
 app.post("/api/generate", async (req, res) => {
@@ -67,7 +81,7 @@ app.post("/api/generate", async (req, res) => {
 
     const pad = n => String(n).padStart(2, "0");
     const filename = `${county.replace(/\s+/g, "-")}-${pad(month)}-${year}.html`;
-    const outputDir = resolve(__dirname, "reports");
+    const outputDir = REPORTS_DIR;
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, filename), html, "utf-8");
 
@@ -119,7 +133,7 @@ app.post("/api/batch-generate", async (req, res) => {
           const regionalHtml = await generateRegionalReport(regions, { month, year });
           const pad = n => String(n).padStart(2, "0");
           const regionalFile = `Regional-Overview-${pad(month)}-${year}.html`;
-          const outputDir = resolve(__dirname, "reports");
+          const outputDir = REPORTS_DIR;
           mkdirSync(outputDir, { recursive: true });
           writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
           regionalPath = `reports/${regionalFile}`;
@@ -131,7 +145,7 @@ app.post("/api/batch-generate", async (req, res) => {
     const indexHtml = generateIndex(results, { month, year, regionalPath });
     const pad = n => String(n).padStart(2, "0");
     const indexFile = `index-${pad(month)}-${year}.html`;
-    const reportsDir = resolve(__dirname, "reports");
+    const reportsDir = REPORTS_DIR;
     mkdirSync(reportsDir, { recursive: true });
     writeFileSync(resolve(reportsDir, indexFile), indexHtml, "utf-8");
     const indexPath = `reports/${indexFile}`;
@@ -192,7 +206,7 @@ app.post("/api/regional-overview", async (req, res) => {
     const regionalHtml = await generateRegionalReport(regions, { month, year });
     const pad = n => String(n).padStart(2, "0");
     const regionalFile = `Regional-Overview-${pad(month)}-${year}.html`;
-    const outputDir = resolve(__dirname, "reports");
+    const outputDir = REPORTS_DIR;
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
 
@@ -246,7 +260,7 @@ app.post("/api/quarterly-overview", async (req, res) => {
     const html = await generateQuarterlyRegionalReport(regions, { quarter, year });
     const pad = n => String(n).padStart(2, "0");
     const filename = `Quarterly-Overview-Q${quarter}-${year}.html`;
-    const outputDir = resolve(__dirname, "reports");
+    const outputDir = REPORTS_DIR;
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, filename), html, "utf-8");
 
@@ -307,7 +321,7 @@ app.post("/api/quarterly-county-overview", async (req, res) => {
     });
 
     const filename = `Quarterly-County-Overview-Q${quarter}-${year}.html`;
-    const outputDir = resolve(__dirname, "reports");
+    const outputDir = REPORTS_DIR;
     mkdirSync(outputDir, { recursive: true });
     writeFileSync(resolve(outputDir, filename), html, "utf-8");
 
@@ -328,7 +342,7 @@ app.get("/reports/combined/:state", (req, res) => {
   const { state } = req.params;
   const { month, year } = req.query;
 
-  const dir = resolve(__dirname, "reports", state);
+  const dir = resolve(REPORTS_DIR, state);
   let files;
   try {
     files = readdirSync(dir)
@@ -419,7 +433,7 @@ app.post("/api/snapshot", async (req, res) => {
       : propertySubType;
     const agentSlug = agentName ? `-${agentName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "")}` : "";
     const base = `${areaSlug}-${typeSlug}${agentSlug}-${pad(month)}-${year}`;
-    const dir  = resolve(__dirname, "reports", "snapshots", stateSlug);
+    const dir  = resolve(REPORTS_DIR, "snapshots", stateSlug);
     mkdirSync(dir, { recursive: true });
     writeFileSync(resolve(dir, `${base}.html`), html, "utf-8");
     writeFileSync(resolve(dir, `${base}.json`), JSON.stringify({ snapshot, agentName, scripts }, null, 2), "utf-8");
@@ -452,7 +466,7 @@ app.post("/api/regen-scripts", async (req, res) => {
       : propertySubType;
     const agentSlug = agentName ? `-${agentName.replace(/\s+/g, "-").replace(/[^a-zA-Z0-9-]/g, "")}` : "";
     const base = `${areaSlug}-${typeSlug}${agentSlug}-${pad(month)}-${year}`;
-    const dir  = resolve(__dirname, "reports", "snapshots", stateSlug);
+    const dir  = resolve(REPORTS_DIR, "snapshots", stateSlug);
     mkdirSync(dir, { recursive: true });
     const updatedHtml = generateSnapshot(snapshot, scripts, agentName || "");
     writeFileSync(resolve(dir, `${base}.html`), updatedHtml, "utf-8");
