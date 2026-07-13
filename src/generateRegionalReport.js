@@ -72,16 +72,26 @@ export async function generateRegionalReport(regions, { month, year }) {
 
   const analysis = await analyzeRegional(regions, month, year);
 
-  const tableRow = (r, valueField, formatType) => `
+  // The YTD columns report the same metric as the table they sit in — sales counts in
+  // the Sales table, median price in the Median Sale Prices table.
+  const METRICS = {
+    count:       { change: "sales",       ytdChange: "ytd" },
+    medianPrice: { change: "medianPrice", ytdChange: "ytdMedianPrice" },
+  };
+
+  const tableRow = (r, valueField, formatType) => {
+    const metric = METRICS[valueField];
+    return `
     <tr>
       <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
       <td style="text-align:center;padding:7px 10px">${fmt(r.current[valueField], formatType)}</td>
       <td style="text-align:center;padding:7px 10px">${fmt(r.lastYear[valueField], formatType)}</td>
-      ${changeCell(r.change[valueField === "count" ? "sales" : valueField === "medianPrice" ? "medianPrice" : null])}
-      <td style="text-align:center;padding:7px 10px">${fmt(r.ytd?.count, "number")}</td>
-      <td style="text-align:center;padding:7px 10px">${fmt(r.priorYtd?.count, "number")}</td>
-      ${changeCell(r.change.ytd)}
+      ${changeCell(r.change[metric.change])}
+      <td style="text-align:center;padding:7px 10px">${fmt(r.ytd?.[valueField], formatType)}</td>
+      <td style="text-align:center;padding:7px 10px">${fmt(r.priorYtd?.[valueField], formatType)}</td>
+      ${changeCell(r.change[metric.ytdChange])}
     </tr>`;
+  };
 
   const tableHeader = `
     <thead>
@@ -184,7 +194,7 @@ export async function generateRegionalReport(regions, { month, year }) {
 
   <div class="section-title">Median Sale Prices</div>
   <table>
-    ${tableHeader.replace(/YTD \d+/g, m => m).replace(/count/g, "medianPrice")}
+    ${tableHeader}
     <tbody>${regions.map(r => tableRow(r, "medianPrice", "currency")).join("")}</tbody>
   </table>
 

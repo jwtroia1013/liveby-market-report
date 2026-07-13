@@ -126,8 +126,10 @@ export async function fetchMonthlyRegion({ region, month, year, propertySubType 
       const info = addMonths(year, month, delta);
       return extract(findPeriod(soldMonthly, periodKey(info.year, info.month)));
     }),
-    ytdCount:      ytdData[0]?.data?.count      ?? 0,
-    priorYtdCount: priorYtdData[0]?.data?.count ?? 0,
+    ytdCount:            ytdData[0]?.data?.count              ?? 0,
+    priorYtdCount:       priorYtdData[0]?.data?.count         ?? 0,
+    ytdMedianPrice:      ytdData[0]?.data?.ClosePrice?.median      ?? null,
+    priorYtdMedianPrice: priorYtdData[0]?.data?.ClosePrice?.median ?? null,
     activeCount:        activeData[0]?.data?.count   ?? 0,
     underContractCount: contractData[0]?.data?.count ?? 0,
     newListingsCurrent:  findPeriod(addedToMarket, currentKey)?.data?.count  ?? 0,

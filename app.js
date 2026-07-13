@@ -476,6 +476,17 @@ app.post("/api/regen-scripts", async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Market Report UI running at http://localhost:${PORT}`);
 });
+
+// Railway sends SIGTERM when a deploy is superseded. Without this the process dies on
+// a non-zero exit and npm logs it as an error, which looks like a crash in the logs.
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, () => {
+    console.log(`Received ${signal}, shutting down.`);
+    server.close(() => process.exit(0));
+    // Don't let an in-flight report generation hold the container open indefinitely.
+    setTimeout(() => process.exit(0), 10000).unref();
+  });
+}

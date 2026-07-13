@@ -62,14 +62,15 @@ export function buildMonthlyRegionRows(regionResults) {
         counties: r.counties,
         current,
         lastYear,
-        ytd:      { count: r.ytdCount },
-        priorYtd: { count: r.priorYtdCount },
+        ytd:      { count: r.ytdCount,      medianPrice: r.ytdMedianPrice },
+        priorYtd: { count: r.priorYtdCount, medianPrice: r.priorYtdMedianPrice },
         newListingsLastYear: r.newListingsLastYear,
         change: {
-          sales:       pctChange(current.count,       lastYear.count),
-          medianPrice: pctChange(current.medianPrice, lastYear.medianPrice),
-          newListings: pctChange(r.newListingsCurrent, r.newListingsLastYear),
-          ytd:         pctChange(r.ytdCount,           r.priorYtdCount),
+          sales:          pctChange(current.count,       lastYear.count),
+          medianPrice:    pctChange(current.medianPrice, lastYear.medianPrice),
+          newListings:    pctChange(r.newListingsCurrent, r.newListingsLastYear),
+          ytd:            pctChange(r.ytdCount,           r.priorYtdCount),
+          ytdMedianPrice: pctChange(r.ytdMedianPrice,     r.priorYtdMedianPrice),
         },
       };
     });
