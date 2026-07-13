@@ -39,7 +39,8 @@ function lastCompletedMonth() {
 }
 
 app.get("/api/current-period", (req, res) => {
-  res.json(lastCompletedMonth());
+  const { quarter, year: quarterYear } = previousQuarter();
+  res.json({ ...lastCompletedMonth(), quarter, quarterYear });
 });
 
 app.get("/api/cache", (req, res) => {
@@ -52,12 +53,15 @@ app.delete("/api/cache", (req, res) => {
 });
 
 app.post("/api/generate", async (req, res) => {
-  const { county, state, propertySubType, agentName, agentEmail, agentWebsite } = req.body;
+  const { county, state, propertySubType, agentName, agentEmail, agentWebsite, period = "month" } = req.body;
   if (!county || !state || !propertySubType) {
     return res.status(400).json({ error: "Missing required fields." });
   }
 
-  const { month, year } = lastCompletedMonth();
+  const isQuarter = period === "quarter";
+  const { quarter, year: qYear } = previousQuarter();
+  const { month, year: mYear } = lastCompletedMonth();
+  const year = isQuarter ? qYear : mYear;
 
   // Stream status updates back to the client as each step completes
   res.setHeader("Content-Type", "text/event-stream");
@@ -67,8 +71,8 @@ app.post("/api/generate", async (req, res) => {
   const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
 
   try {
-    send("status", { message: "Fetching live market data…" });
-    const data = await fetchMarketReport({ county, state, month, year, propertySubType });
+    send("status", { message: `Fetching live market data for ${isQuarter ? `Q${quarter} ${year}` : `${month}/${year}`}…` });
+    const data = await fetchMarketReport({ county, state, year, period, month, quarter, propertySubType });
 
     send("status", { message: "Writing the market analysis…" });
     const analysis = await analyzeMarket(data);
@@ -79,13 +83,11 @@ app.post("/api/generate", async (req, res) => {
       : null;
     const html = generateReport(data, analysis, agentOverride);
 
-    const pad = n => String(n).padStart(2, "0");
-    const filename = `${county.replace(/\s+/g, "-")}-${pad(month)}-${year}.html`;
-    const outputDir = REPORTS_DIR;
-    mkdirSync(outputDir, { recursive: true });
-    writeFileSync(resolve(outputDir, filename), html, "utf-8");
+    const filename = `${county.replace(/\s+/g, "-")}-${data.periodMeta.slug}.html`;
+    mkdirSync(REPORTS_DIR, { recursive: true });
+    writeFileSync(resolve(REPORTS_DIR, filename), html, "utf-8");
 
-    send("done", { filename, month, year });
+    send("done", { filename, month: data.month, year, quarter, period, label: data.periodMeta.headingLabel });
   } catch (err) {
     console.error("Generation error:", err);
     send("error", { message: err.message });
@@ -95,10 +97,11 @@ app.post("/api/generate", async (req, res) => {
 });
 
 app.post("/api/batch-generate", async (req, res) => {
-  const { states, propertyTypes, agent, includeRegional = true } = req.body;
+  const { states, propertyTypes, agent, includeRegional = true, period = "month" } = req.body;
   if (!states || !states.length) {
     return res.status(400).json({ error: "Missing required field: states" });
   }
+  const isQuarterBatch = period === "quarter";
 
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -109,11 +112,17 @@ app.post("/api/batch-generate", async (req, res) => {
   // Keep connection alive every 20s for long-running batches
   const keepalive = setInterval(() => res.write(": ping\n\n"), 20000);
 
+  const pad = n => String(n).padStart(2, "0");
+
   try {
-    const { month, year } = lastCompletedMonth();
+    const { quarter, year: qYear } = previousQuarter();
+    const { month, year: mYear } = lastCompletedMonth();
+    const year = isQuarterBatch ? qYear : mYear;
+    const periodSlug = isQuarterBatch ? `Q${quarter}-${year}` : `${pad(month)}-${year}`;
 
     const results = await runBatch({
       states,
+      period,
       propertyTypes: propertyTypes && propertyTypes.length ? propertyTypes : null,
       agent: agent || {},
       collectData: includeRegional,
@@ -123,47 +132,48 @@ app.post("/api/batch-generate", async (req, res) => {
       },
     });
 
+    // A quarterly batch pairs with the quarterly regional overview, a monthly batch with
+    // the monthly one. Either way the region is fetched as its own combined area — a
+    // region's median cannot be derived from the county reports above.
     let regionalPath = null;
-    if (includeRegional) {
-      const successWithData = results.filter(r => r.status === "success" && r.data);
-      if (successWithData.length > 0) {
-        send("status", { message: "Generating Regional Overview…" });
-        // Fetched separately from the per-county reports: a region's median has to come
-        // from the API's own aggregate, it cannot be derived from the county figures.
-        const regionFetches = await Promise.all(
-          REGIONS.map(region =>
-            fetchMonthlyRegion({ region, month, year, propertySubType: "SingleFamilyResidence" })
-              .catch(err => {
-                console.error(`Failed to fetch region ${region.name}: ${err.message}`);
-                return null;
-              })
-          )
-        );
-        const regions = buildMonthlyRegionRows(regionFetches.filter(Boolean));
-        if (regions.length > 0) {
-          const regionalHtml = await generateRegionalReport(regions, { month, year });
-          const pad = n => String(n).padStart(2, "0");
-          const regionalFile = `Regional-Overview-${pad(month)}-${year}.html`;
-          const outputDir = REPORTS_DIR;
-          mkdirSync(outputDir, { recursive: true });
-          writeFileSync(resolve(outputDir, regionalFile), regionalHtml, "utf-8");
-          regionalPath = `reports/${regionalFile}`;
+    if (includeRegional && results.some(r => r.status === "success")) {
+      send("status", { message: "Generating Regional Overview…" });
+      if (isQuarterBatch) {
+        const fetches = await Promise.all(REGIONS.map(region =>
+          fetchQuarterlyRegion({ region, quarter, year, propertySubType: "SingleFamilyResidence" })
+            .catch(err => { console.error(`Failed region ${region.name}: ${err.message}`); return null; })));
+        const regions = buildQuarterlyRegionRows(fetches.filter(Boolean));
+        if (regions.length) {
+          const html = await generateQuarterlyRegionalReport(regions, { quarter, year });
+          const file = `Quarterly-Overview-Q${quarter}-${year}.html`;
+          writeFileSync(resolve(REPORTS_DIR, file), html, "utf-8");
+          regionalPath = `reports/${file}`;
+        }
+      } else {
+        const fetches = await Promise.all(REGIONS.map(region =>
+          fetchMonthlyRegion({ region, month, year, propertySubType: "SingleFamilyResidence" })
+            .catch(err => { console.error(`Failed region ${region.name}: ${err.message}`); return null; })));
+        const regions = buildMonthlyRegionRows(fetches.filter(Boolean));
+        if (regions.length) {
+          const html = await generateRegionalReport(regions, { month, year });
+          const file = `Regional-Overview-${pad(month)}-${year}.html`;
+          writeFileSync(resolve(REPORTS_DIR, file), html, "utf-8");
+          regionalPath = `reports/${file}`;
         }
       }
     }
 
     send("status", { message: "Building report index…" });
-    const indexHtml = generateIndex(results, { month, year, regionalPath });
-    const pad = n => String(n).padStart(2, "0");
-    const indexFile = `index-${pad(month)}-${year}.html`;
-    const reportsDir = REPORTS_DIR;
-    mkdirSync(reportsDir, { recursive: true });
-    writeFileSync(resolve(reportsDir, indexFile), indexHtml, "utf-8");
+    const indexHtml = generateIndex(results, { month, year, quarter, period, regionalPath });
+    const indexFile = `index-${periodSlug}.html`;
+    mkdirSync(REPORTS_DIR, { recursive: true });
+    writeFileSync(resolve(REPORTS_DIR, indexFile), indexHtml, "utf-8");
     const indexPath = `reports/${indexFile}`;
 
     const succeeded = results.filter(r => r.status === "success");
     const failed = results.filter(r => r.status === "error");
-    send("done", { results, regionalPath, indexPath, succeeded: succeeded.length, failed: failed.length, month, year });
+    send("done", { results, regionalPath, indexPath, succeeded: succeeded.length, failed: failed.length,
+      month, year, quarter, period });
   } catch (err) {
     console.error("Batch generation error:", err);
     send("error", { message: err.message });
@@ -337,14 +347,17 @@ const MONTH_NAMES_FULL = ["January","February","March","April","May","June","Jul
 
 app.get("/reports/combined/:state", (req, res) => {
   const { state } = req.params;
-  const { month, year } = req.query;
+  const { month, year, quarter } = req.query;
+
+  // Quarterly reports are named "...-Q2-2026.html", monthly ones "...-06-2026.html".
+  const periodSlug = quarter ? `Q${quarter}` : month;
 
   const dir = resolve(REPORTS_DIR, state);
   let files;
   try {
     files = readdirSync(dir)
       .filter(f => f.endsWith(".html"))
-      .filter(f => (month && year) ? f.includes(`-${month}-${year}.html`) : true)
+      .filter(f => (periodSlug && year) ? f.includes(`-${periodSlug}-${year}.html`) : true)
       .sort();
   } catch {
     return res.status(404).send("<h2>No reports found for this state.</h2>");
@@ -352,9 +365,13 @@ app.get("/reports/combined/:state", (req, res) => {
   if (!files.length) return res.status(404).send("<h2>No reports found.</h2>");
 
   const stateName = STATE_DISPLAY[state] || state;
+  const qMatch = files[0].match(/-Q([1-4])-(\d{4})\.html$/);
   const dateMatch = files[0].match(/-(\d{2})-(\d{4})\.html$/);
-  const monthName = dateMatch ? MONTH_NAMES_FULL[parseInt(dateMatch[1]) - 1] : "";
-  const reportYear = dateMatch ? dateMatch[2] : "";
+  const periodName = qMatch
+    ? `Q${qMatch[1]}`
+    : (dateMatch ? MONTH_NAMES_FULL[parseInt(dateMatch[1]) - 1] : "");
+  const reportYear = qMatch ? qMatch[2] : (dateMatch ? dateMatch[2] : "");
+  const monthName = periodName;
 
   let sharedHead = "";
   const bodyParts = [];

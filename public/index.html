@@ -540,6 +540,15 @@
     <input type="text" id="agent-website" placeholder="e.g. jane.agent.randcenter.com">
   </div>
 
+  <div class="form-group">
+    <label for="period">Report Period</label>
+    <select id="period">
+      <option value="month" selected>Previous Month</option>
+      <option value="quarter">Previous Quarter</option>
+    </select>
+    <div style="font-size:11px;color:#888;margin-top:5px" id="period-hint"></div>
+  </div>
+
   <button class="btn" id="generate-btn" disabled>
     <span id="btn-text">Generate Report</span>
   </button>
@@ -612,6 +621,15 @@
   <div class="form-group">
     <label for="batch-agent-website">Website</label>
     <input type="text" id="batch-agent-website" placeholder="e.g. jane.agent.randcenter.com">
+  </div>
+
+  <div class="form-group">
+    <label for="batch-period">Report Period</label>
+    <select id="batch-period">
+      <option value="month" selected>Previous Month</option>
+      <option value="quarter">Previous Quarter</option>
+    </select>
+    <div style="font-size:11px;color:#888;margin-top:5px" id="batch-period-hint"></div>
   </div>
 
   <button class="btn" id="batch-btn">Generate All Reports</button>
@@ -699,12 +717,27 @@
   let currentPeriod = null;
   let recentReports = [];
 
-  // Load current period
+  // Load current period, and show which concrete period each selector will pull.
   fetch("/api/current-period")
     .then(r => r.json())
-    .then(({ month, year }) => {
+    .then(({ month, year, quarter, quarterYear }) => {
       currentPeriod = { month, year };
       periodLabel.textContent = `${MONTH_NAMES[month - 1]} ${year}`;
+
+      const monthLabel   = `${MONTH_NAMES[month - 1]} ${year}`;
+      const quarterLabel = `Q${quarter} ${quarterYear}`;
+      const describe = sel => sel === "quarter"
+        ? `Quarterly report for ${quarterLabel} — Recent Sales Trends compares ${quarterLabel} to the prior quarter and to the same quarter last year.`
+        : `Monthly report for ${monthLabel}.`;
+
+      for (const [selId, hintId] of [["period", "period-hint"], ["batch-period", "batch-period-hint"]]) {
+        const sel  = document.getElementById(selId);
+        const hint = document.getElementById(hintId);
+        if (!sel || !hint) continue;
+        const update = () => { hint.textContent = describe(sel.value); };
+        sel.addEventListener("change", update);
+        update();
+      }
     });
 
   // State → county cascade
@@ -768,6 +801,7 @@
           county,
           state,
           propertySubType,
+          period: document.getElementById("period").value,
           agentName: agentName.value.trim(),
           agentEmail: agentEmail.value.trim(),
           agentWebsite: agentWebsite.value.trim()
@@ -904,7 +938,7 @@
       const res = await fetch("/api/batch-generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ states, propertyTypes, agent, includeRegional }),
+        body: JSON.stringify({ states, propertyTypes, agent, includeRegional, period: document.getElementById("batch-period").value }),
       });
 
       const reader = res.body.getReader();

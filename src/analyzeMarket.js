@@ -20,19 +20,25 @@ function fmtPct(n) {
 }
 
 export async function analyzeMarket(data) {
-  const { county, state, month, year, propertySubType,
-          currentPeriod, lastMonthPeriod, lastYearPeriod,
+  const { county, state, month, year, propertySubType, periodMeta,
+          currentPeriod, priorPeriod, lastYearPeriod,
           ytdCount, priorYtdCount, activeSnapshot, underContractCount,
           newListingsCurrent, newListingsLastYear } = data;
 
   const monthName = MONTH_NAMES[month - 1];
+  // Quarterly reports must not be described as a month — the narrative says "Q2 2026".
+  const isQuarter   = periodMeta?.type === "quarter";
+  const periodLabel = periodMeta?.headingLabel ?? `${monthName} ${year}`;
+  const priorLabel  = periodMeta?.priorLabel ?? "last month";
+  const periodNoun  = isQuarter ? "quarter" : "month";
+  const ytdSpan     = isQuarter ? `Jan–${monthName} ${year}` : `Jan–${monthName} ${year}`;
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "single family homes"
     : propertySubType === "CondoTownhome" ? "condominiums and townhomes"
     : propertySubType === "Condominium" ? "condominiums"
     : "townhouses";
 
   const cur = currentPeriod ?? {};
-  const lm  = lastMonthPeriod ?? {};
+  const lm  = priorPeriod ?? {};
   const ly  = lastYearPeriod ?? {};
 
   const pctChg = (a, b) => {
@@ -47,18 +53,18 @@ export async function analyzeMarket(data) {
   const ytdYoY       = pctChg(ytdCount, priorYtdCount);
 
   const marketSummary = `
-MARKET DATA SUMMARY — ${county} County, ${state} | ${monthName} ${year} | ${subtypeLabel}
+MARKET DATA SUMMARY — ${county} County, ${state} | ${periodLabel} | ${subtypeLabel}
 
-RECENT SALES (${monthName} ${year}):
+RECENT SALES (${periodLabel} — a full ${periodNoun} of closed sales):
 - Homes Sold: ${cur.count ?? "N/A"} (vs ${ly.count ?? "N/A"} last year, ${soldYoY != null ? soldYoY + "% YoY" : "N/A"})
 - Median Sale Price: ${fmt$(cur.medianSalePrice)} (vs ${fmt$(ly.medianSalePrice)} last year, ${priceYoY != null ? priceYoY + "% YoY" : "N/A"})
-- Median List Price: ${fmt$(cur.medianListPrice)} (vs ${fmt$(lm.medianListPrice)} last month)
+- Median List Price: ${fmt$(cur.medianListPrice)} (vs ${fmt$(lm.medianListPrice)} in ${priorLabel})
 - Sale-to-List Ratio: ${fmtPct(cur.saleToListRatio)} (homes selling ${cur.saleToListRatio >= 1 ? "above" : "below"} asking price on average)
 - Sales Volume: ${fmt$(cur.salesVolume)}
 - Median Days on Market: ${cur.medianDaysOnMarket ?? "N/A"} days (vs ${ly.medianDaysOnMarket ?? "N/A"} last year, ${domYoY != null ? domYoY + "% YoY" : "N/A"})
 - New Listings Added: ${newListingsCurrent ?? "N/A"} (vs ${newListingsLastYear ?? "N/A"} last year, ${listingsYoY != null ? listingsYoY + "% YoY" : "N/A"})
 
-YEAR TO DATE (Jan–${monthName} ${year}):
+YEAR TO DATE (${ytdSpan}):
 - Homes Sold YTD: ${ytdCount ?? "N/A"} (vs ${priorYtdCount ?? "N/A"} same period last year, ${ytdYoY != null ? ytdYoY + "% YoY" : "N/A"})
 
 CURRENT INVENTORY (live snapshot):
@@ -68,9 +74,9 @@ CURRENT INVENTORY (live snapshot):
 - Price Range: ${fmt$(activeSnapshot?.lowPrice)} – ${fmt$(activeSnapshot?.highPrice)}
 `.trim();
 
-  const prompt = `You are writing the "Market Analysis" page of a monthly real estate market report for ${county} County, ${state}. The report is produced by Howard Hanna Rand Realty and is distributed to homeowners and prospective buyers in the area.
+  const prompt = `You are writing the "Market Analysis" page of a ${isQuarter ? "quarterly" : "monthly"} real estate market report for ${county} County, ${state}. The report is produced by Howard Hanna Rand Realty and is distributed to homeowners and prospective buyers in the area.
 
-Here is the market data for ${monthName} ${year}:
+Here is the market data for ${periodLabel}${isQuarter ? " (three months of closed sales — refer to it as the quarter, never as a single month)" : ""}:
 
 ${marketSummary}
 

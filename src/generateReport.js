@@ -101,9 +101,13 @@ function buildPage2Table(data) {
     return { currentSales, moi, moiTrend, avgSales6 };
   }
 
-  // "All Price Ranges" summary row using overall data
+  // "All Price Ranges" summary row.
+  // This table is month-based in both report modes, so the sales figure must be the
+  // month's count from the monthly series — NOT currentPeriod, which holds the whole
+  // quarter's sales in a quarterly report and would understate inventory ~3x.
   const allActiveCount = activeSnapshot?.count ?? null;
-  const allCurrentSales = currentPeriod?.count ?? null;
+  const currentMonthEntry = soldMonthly?.find(e => e.period === periodKey(year, month));
+  const allCurrentSales = currentMonthEntry?.data?.count ?? null;
   const allMoi = (allActiveCount && allCurrentSales) ? allActiveCount / allCurrentSales : null;
 
   // 3-month trend for all: use soldMonthly (no segments)
@@ -256,12 +260,22 @@ function svgGauge(moi) {
 }
 
 export function generateReport(data, analysis = null, agentOverride = null) {
-  const { county, state, month, year, propertySubType,
-          currentPeriod, lastMonthPeriod, lastYearPeriod, threeMonthPeriods,
-          ytdCount, lastMonthYtdCount, priorYtdCount, activeSnapshot, underContractCount,
-          newListingsCurrent, newListingsLastMonth, newListingsLastYear,
+  const { county, state, month, year, propertySubType, periodMeta,
+          currentPeriod, priorPeriod, lastYearPeriod, threeMonthPeriods,
+          ytdCount, priorPeriodYtdCount, priorYtdCount, activeSnapshot, underContractCount,
+          newListingsCurrent, newListingsPrior, newListingsLastYear,
           soldByCalendarMonth, saleToListTrend } = data;
 
+  // periodMeta carries every label that differs between the monthly and quarterly report.
+  const meta = periodMeta ?? {
+    type: "month",
+    currentLabel:  `${MONTH_NAMES[month - 1]} ${year}`,
+    priorLabel:    `${MONTH_NAMES[(month + 10) % 12]} ${month === 1 ? year - 1 : year}`,
+    lastYearLabel: `${MONTH_NAMES[month - 1]} ${year - 1}`,
+    priorChangeLabel: "Last Month",
+    headingLabel:  `${MONTH_NAMES[month - 1]} ${year}`,
+  };
+  const periodLabel = meta.headingLabel;
   const monthName = MONTH_NAMES[month - 1];
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence"
     : propertySubType === "CondoTownhome" ? "Condos / Townhomes"
@@ -333,17 +347,14 @@ export function generateReport(data, analysis = null, agentOverride = null) {
     return `<span style="color:${color}">${arrow} ${Math.abs(delta)} days</span>`;
   }
 
-  const lastMonthName = MONTH_NAMES[data.lastMonthPeriod ? ((month - 2 + 12) % 12) : month - 1];
-  const lastMonthYear = month === 1 ? year - 1 : year;
-
   const trendTableRows = salesRows.map(({ label, field, type, invert }) => {
     const isNewListings = field === "_newListings";
-    const cur = isNewListings ? newListingsCurrent  : currentPeriod?.[field];
-    const lm  = isNewListings ? newListingsLastMonth : lastMonthPeriod?.[field];
-    const ly  = isNewListings ? newListingsLastYear  : lastYearPeriod?.[field];
-    const changeFromLastMonth = type === "number" && field === "medianDaysOnMarket"
-      ? changeDays(cur, lm, invert)
-      : changePct(cur, lm, invert);
+    const cur = isNewListings ? newListingsCurrent : currentPeriod?.[field];
+    const pr  = isNewListings ? newListingsPrior   : priorPeriod?.[field];
+    const ly  = isNewListings ? newListingsLastYear : lastYearPeriod?.[field];
+    const changeFromPrior = type === "number" && field === "medianDaysOnMarket"
+      ? changeDays(cur, pr, invert)
+      : changePct(cur, pr, invert);
     const changeFromLastYear = type === "number" && field === "medianDaysOnMarket"
       ? changeDays(cur, ly, invert)
       : changePct(cur, ly, invert);
@@ -351,23 +362,23 @@ export function generateReport(data, analysis = null, agentOverride = null) {
       <tr>
         <td class="row-label">${label}</td>
         <td>${fmt(cur, type)}</td>
-        <td>${fmt(lm, type)}</td>
-        <td class="change-col">${changeFromLastMonth}</td>
+        <td>${fmt(pr, type)}</td>
+        <td class="change-col">${changeFromPrior}</td>
         <td>${fmt(ly, type)}</td>
         <td class="change-col">${changeFromLastYear}</td>
       </tr>
     `;
   }).join("");
 
-  // YTD row — current YTD vs last month's YTD (prior month's running total) and prior year
-  const ytdVsLastMonth = changePct(ytdCount, data.lastMonthYtdCount);
+  // YTD row — YTD through this period vs YTD through the prior period, and vs prior year
+  const ytdVsPrior = changePct(ytdCount, priorPeriodYtdCount);
   const ytdVsLastYear = changePct(ytdCount, priorYtdCount);
   const ytdRow = `
     <tr>
       <td class="row-label">Homes Sold Year to Date</td>
       <td>${fmt(ytdCount)}</td>
-      <td>${fmt(data.lastMonthYtdCount)}</td>
-      <td class="change-col">${ytdVsLastMonth}</td>
+      <td>${fmt(priorPeriodYtdCount)}</td>
+      <td class="change-col">${ytdVsPrior}</td>
       <td>${fmt(priorYtdCount)}</td>
       <td class="change-col">${ytdVsLastYear}</td>
     </tr>
@@ -425,7 +436,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${county} County Market Report — ${monthName} ${year}</title>
+  <title>${county} County Market Report — ${periodLabel}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -723,23 +734,23 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 <body>
 
 <div class="pdf-bar">
-  <span class="pdf-bar-title">${county} County &mdash; ${monthName} ${year} Market Report</span>
+  <span class="pdf-bar-title">${county} County &mdash; ${periodLabel} Market Report</span>
   <button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 </div>
 
 <!-- PAGE 1 -->
 <div class="page">
-  ${pageHeader(`${monthName} ${year} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
   <div class="section-title">Recent Sales Trends</div>
   <table>
     <thead>
       <tr>
         <th></th>
-        <th>Current Period<br><span style="font-weight:400;font-size:0.85em">${monthName} ${year}</span></th>
-        <th>Last Month<br><span style="font-weight:400;font-size:0.85em">${lastMonthName} ${lastMonthYear}</span></th>
-        <th>Change From<br><span style="font-weight:400;font-size:0.85em">Last Month</span></th>
-        <th>Last Year<br><span style="font-weight:400;font-size:0.85em">${monthName} ${year - 1}</span></th>
+        <th>Current Period<br><span style="font-weight:400;font-size:0.85em">${meta.currentLabel}</span></th>
+        <th>${meta.priorChangeLabel}<br><span style="font-weight:400;font-size:0.85em">${meta.priorLabel}</span></th>
+        <th>Change From<br><span style="font-weight:400;font-size:0.85em">${meta.priorChangeLabel}</span></th>
+        <th>Last Year<br><span style="font-weight:400;font-size:0.85em">${meta.lastYearLabel}</span></th>
         <th>Change From<br><span style="font-weight:400;font-size:0.85em">Last Year</span></th>
       </tr>
     </thead>
@@ -760,7 +771,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
 <!-- PAGE 2 -->
 <div class="page">
-  ${pageHeader(`${monthName} ${year} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
   <div class="section-title">Market Conditions by Price Range</div>
   <table>
@@ -770,7 +781,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
         <th>Active Listings</th>
         <th>Months of Inventory</th>
         <th>3 Month Trend</th>
-        <th>Sales (Current Mo.)</th>
+        <th>Sales (${MONTH_NAMES[month - 1].slice(0, 3)} ${year})</th>
         <th>6 Month Avg Sales</th>
         <th>Market Climate</th>
       </tr>
@@ -801,11 +812,11 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
 <!-- PAGE 3: MARKET ANALYSIS -->
 <div class="page analysis-page">
-  ${pageHeader(`${monthName} ${year} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
   <div class="section-title">Market Analysis</div>
   <div class="analysis-meta">
-    ${county} County, ${state} &nbsp;&bull;&nbsp; ${monthName} ${year} &nbsp;&bull;&nbsp;
+    ${county} County, ${state} &nbsp;&bull;&nbsp; ${periodLabel} &nbsp;&bull;&nbsp;
     Prepared for homeowners and prospective buyers
   </div>
 
@@ -822,7 +833,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
 <!-- PAGE 4 -->
 <div class="page">
-  ${pageHeader(`${monthName} ${year} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
   <div class="section-title">Homes Sold</div>
   ${svgBarChart([year, year - 1, year - 2], soldByCalendarMonth)}
@@ -842,7 +853,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
       <div style="font-size:10px;color:#666;margin-top:8px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;line-height:1.4">
         Sale to List<br>Price Ratio
       </div>
-      <div style="font-size:10px;color:#999;margin-top:6px">${monthName} ${year}</div>
+      <div style="font-size:10px;color:#999;margin-top:6px">${periodLabel}</div>
     </div>
     <div style="flex:1;min-width:0">${svgLineChart(saleToListTrend)}</div>
   </div>
@@ -884,7 +895,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
       <div style="font-size:10px;color:#666;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:8px;line-height:1.4">
         Avg Sale to<br>List Price Ratio
       </div>
-      <div style="font-size:10px;color:#999;margin-top:6px">${monthName} ${year}</div>
+      <div style="font-size:10px;color:#999;margin-top:6px">${periodLabel}</div>
     </div>
   </div>
 

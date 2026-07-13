@@ -10,9 +10,11 @@ const TYPE_LABELS = {
   CondoTownhome: "Condos/Townhomes",
 };
 
-export function generateIndex(batchResults, { month, year, regionalPath = null, indexUrl = null }) {
+export function generateIndex(batchResults, { month, year, quarter = null, period = "month", regionalPath = null, indexUrl = null }) {
   const { branding } = config;
   const monthName = MONTH_NAMES[month - 1];
+  // Quarterly batches title the index "Q2 2026" rather than a month name.
+  const periodLabel = period === "quarter" ? `Q${quarter} ${year}` : `${monthName} ${year}`;
   const succeeded = batchResults.filter(r => r.status === "success");
   const failed = batchResults.filter(r => r.status === "error");
 
@@ -74,7 +76,7 @@ export function generateIndex(batchResults, { month, year, regionalPath = null, 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${monthName} ${year} Market Reports — Howard Hanna Rand Realty</title>
+  <title>${periodLabel} Market Reports — Howard Hanna Rand Realty</title>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -95,7 +97,7 @@ export function generateIndex(batchResults, { month, year, regionalPath = null, 
       <div class="brand">
         ${branding.company}<span class="brand-div">|</span>${branding.division}
       </div>
-      <h1>${monthName} ${year} Market Reports</h1>
+      <h1>${periodLabel} Market Reports</h1>
       <p class="subtitle">${succeeded.length} reports generated &bull; ${new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</p>
     </div>
 
