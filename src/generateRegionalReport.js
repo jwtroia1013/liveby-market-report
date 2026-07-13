@@ -144,7 +144,21 @@ export async function generateRegionalReport(regions, { month, year }) {
     .pdf-bar { position: sticky; top: 0; z-index: 100; background: ${branding.primaryColor}; display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
     .pdf-bar-title { font-family: "Playfair Display", serif; font-size: 14px; color: rgba(255,255,255,0.85); }
     .pdf-btn { display: inline-flex; align-items: center; gap: 8px; background: ${branding.accentColor}; color: white; border: none; border-radius: 4px; padding: 8px 20px; font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
-    @media print { .pdf-bar { display: none; } .page { margin: 0; padding: 0.5in 0.6in 0.4in; page-break-after: always; } .page:last-child { page-break-after: avoid; } @page { size: letter; margin: 0; } }
+    /* Print is tighter than screen: with the web fonts loaded a page renders taller than
+       a sheet, which pushed the footer disclaimer onto a page of its own. Cell padding is
+       set inline, so these need !important. min-height leaves slack for the print dialog's
+       own margins. */
+    @media print {
+      .pdf-bar { display: none; }
+      @page { size: letter; margin: 0; }
+      .page { margin: 0; padding: 0.42in 0.55in 0.3in; min-height: 10.2in; page-break-after: always; }
+      .page:last-child { page-break-after: avoid; }
+      thead th, tbody td { padding-top: 4px !important; padding-bottom: 4px !important; }
+      .page-header { padding-bottom: 7px; margin-bottom: 13px; }
+      .section-title { margin-top: 14px; margin-bottom: 8px; }
+      .analysis-body p { font-size: 0.9em; line-height: 1.55; margin-bottom: 12px; }
+      table { page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
