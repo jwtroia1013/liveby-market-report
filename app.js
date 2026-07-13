@@ -16,6 +16,7 @@ import { generateQuarterlyRegionalReport } from "./src/generateQuarterlyRegional
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
 import { generateIndex } from "./src/generateIndex.js";
 import { DATA_DIR, cacheStats, cacheClear } from "./src/cache.js";
+import { areaSlug, areaHeading } from "./src/areas.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -83,7 +84,7 @@ app.post("/api/generate", async (req, res) => {
       : null;
     const html = generateReport(data, analysis, agentOverride);
 
-    const filename = `${county.replace(/\s+/g, "-")}-${data.periodMeta.slug}.html`;
+    const filename = `${areaSlug(county)}-${data.periodMeta.slug}.html`;
     mkdirSync(REPORTS_DIR, { recursive: true });
     writeFileSync(resolve(REPORTS_DIR, filename), html, "utf-8");
 
@@ -128,7 +129,7 @@ app.post("/api/batch-generate", async (req, res) => {
       collectData: includeRegional,
       onProgress: ({ current, total, county, state, propertyType }) => {
         send("progress", { current, total, county, state, propertyType,
-          message: `Generating report ${current} of ${total}: ${county} County, ${state} — ${propertyType}` });
+          message: `Generating report ${current} of ${total}: ${areaHeading(county)}, ${state} — ${propertyType}` });
       },
     });
 

@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import { areaHeading } from "./areas.js";
 const require = createRequire(import.meta.url);
 const config = require("../config.json");
 
@@ -276,6 +277,8 @@ export function generateReport(data, analysis = null, agentOverride = null) {
     headingLabel:  `${MONTH_NAMES[month - 1]} ${year}`,
   };
   const periodLabel = meta.headingLabel;
+  // Connecticut is a planning region addressed by boundary ID — never render the raw ID.
+  const countyHeading = areaHeading(county);
   const monthName = MONTH_NAMES[month - 1];
   const subtypeLabel = propertySubType === "SingleFamilyResidence" ? "Single Family Residence"
     : propertySubType === "CondoTownhome" ? "Condos / Townhomes"
@@ -426,7 +429,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
   const pageHeader = (subtitle) => `
     <div class="page-header">
-      <div class="header-county">${county} County</div>
+      <div class="header-county">${countyHeading}</div>
       <div class="header-subtitle">${subtitle}</div>
     </div>
   `;
@@ -436,7 +439,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${county} County Market Report — ${periodLabel}</title>
+  <title>${countyHeading} Market Report — ${periodLabel}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -734,7 +737,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 <body>
 
 <div class="pdf-bar">
-  <span class="pdf-bar-title">${county} County &mdash; ${periodLabel} Market Report</span>
+  <span class="pdf-bar-title">${countyHeading} &mdash; ${periodLabel} Market Report</span>
   <button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 </div>
 
@@ -816,7 +819,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
   <div class="section-title">Market Analysis</div>
   <div class="analysis-meta">
-    ${county} County, ${state} &nbsp;&bull;&nbsp; ${periodLabel} &nbsp;&bull;&nbsp;
+    ${countyHeading}, ${state} &nbsp;&bull;&nbsp; ${periodLabel} &nbsp;&bull;&nbsp;
     Prepared for homeowners and prospective buyers
   </div>
 

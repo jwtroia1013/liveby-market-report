@@ -1,3 +1,4 @@
+import { areaHeading } from "./areas.js";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const config = require("../config.json");
@@ -33,7 +34,7 @@ export function generateIndex(batchResults, { month, year, quarter = null, perio
       ).join(" ");
       return `
         <tr>
-          <td style="padding:9px 16px;font-weight:600;color:#333">${county} County</td>
+          <td style="padding:9px 16px;font-weight:600;color:#333">${areaHeading(county)}</td>
           <td style="padding:9px 16px">${typeLinks}</td>
         </tr>`;
     }).join("");

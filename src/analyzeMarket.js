@@ -1,4 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { areaHeading, areaName } from "./areas.js";
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const config = require("../config.json");
@@ -26,6 +27,8 @@ export async function analyzeMarket(data) {
           newListingsCurrent, newListingsLastYear } = data;
 
   const monthName = MONTH_NAMES[month - 1];
+  const countyHeading = areaHeading(county);
+  const countyPlain  = areaName(county);
   // Quarterly reports must not be described as a month — the narrative says "Q2 2026".
   const isQuarter   = periodMeta?.type === "quarter";
   const periodLabel = periodMeta?.headingLabel ?? `${monthName} ${year}`;
@@ -53,7 +56,7 @@ export async function analyzeMarket(data) {
   const ytdYoY       = pctChg(ytdCount, priorYtdCount);
 
   const marketSummary = `
-MARKET DATA SUMMARY — ${county} County, ${state} | ${periodLabel} | ${subtypeLabel}
+MARKET DATA SUMMARY — ${countyHeading}, ${state} | ${periodLabel} | ${subtypeLabel}
 
 RECENT SALES (${periodLabel} — a full ${periodNoun} of closed sales):
 - Homes Sold: ${cur.count ?? "N/A"} (vs ${ly.count ?? "N/A"} last year, ${soldYoY != null ? soldYoY + "% YoY" : "N/A"})
@@ -74,13 +77,13 @@ CURRENT INVENTORY (live snapshot):
 - Price Range: ${fmt$(activeSnapshot?.lowPrice)} – ${fmt$(activeSnapshot?.highPrice)}
 `.trim();
 
-  const prompt = `You are writing the "Market Analysis" page of a ${isQuarter ? "quarterly" : "monthly"} real estate market report for ${county} County, ${state}. The report is produced by Howard Hanna Rand Realty and is distributed to homeowners and prospective buyers in the area.
+  const prompt = `You are writing the "Market Analysis" page of a ${isQuarter ? "quarterly" : "monthly"} real estate market report for ${countyHeading}, ${state}. The report is produced by Howard Hanna Rand Realty and is distributed to homeowners and prospective buyers in the area.
 
 Here is the market data for ${periodLabel}${isQuarter ? " (three months of closed sales — refer to it as the quarter, never as a single month)" : ""}:
 
 ${marketSummary}
 
-Write 3–4 paragraphs of market commentary aimed at a consumer — someone who either currently lives in ${county} County or is considering buying or selling a home there.
+Write 3–4 paragraphs of market commentary aimed at a consumer — someone who either currently lives in ${countyPlain} or is considering buying or selling a home there.
 
 Guidelines:
 - Use plain, conversational language. Avoid jargon.

@@ -5,6 +5,7 @@ import { analyzeMarket } from "./analyzeMarket.js";
 import { generateReport } from "./generateReport.js";
 import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./batchConfig.js";
 import { DATA_DIR } from "./cache.js";
+import { areaSlug } from "./areas.js";
 
 const delay = ms => new Promise(r => setTimeout(r, ms));
 
@@ -63,7 +64,7 @@ function stateDir(state) {
 // the server serves /reports from. Writing under the repo would 404 in production.
 function saveReport(html, { county, state, propertyType, periodSlug }) {
   const slug = propertyTypeSlug(propertyType);
-  const filename = `${county.replace(/\s+/g, "-")}-${slug}-${periodSlug}.html`;
+  const filename = `${areaSlug(county)}-${slug}-${periodSlug}.html`;
   const dir = resolve(DATA_DIR, "reports", stateDir(state));
   mkdirSync(dir, { recursive: true });
   writeFileSync(resolve(dir, filename), html, "utf-8");

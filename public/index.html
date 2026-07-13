@@ -697,6 +697,11 @@
       "Bergen", "Essex", "Hudson", "Hunterdon", "Middlesex",
       "Monmouth", "Morris", "Passaic", "Somerset", "Sussex",
       "Union", "Warren"
+    ],
+    // Connecticut abolished county government; LiveBy addresses Western Connecticut as a
+    // planning region by boundary ID. Show the name, send the ID.
+    "Connecticut": [
+      { value: "69a5effad74f79343900cdcd", label: "Western Connecticut" }
     ]
   };
 
@@ -753,8 +758,8 @@
     countySelect.innerHTML = '<option value="">— Select a county —</option>';
     for (const county of COUNTIES[state]) {
       const opt = document.createElement("option");
-      opt.value = county;
-      opt.textContent = county;
+      opt.value = typeof county === "string" ? county : county.value;
+      opt.textContent = typeof county === "string" ? county : county.label;
       countySelect.appendChild(opt);
     }
     countySelect.disabled = false;
