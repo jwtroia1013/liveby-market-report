@@ -1,5 +1,5 @@
 import express from "express";
-import { mkdirSync, writeFileSync, readdirSync, readFileSync } from "fs";
+import { mkdirSync, writeFileSync, readdirSync, readFileSync, statSync, unlinkSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fetchMarketReport, fetchMonthlyRegion } from "./src/fetchData.js";
@@ -51,6 +51,66 @@ app.get("/api/cache", (req, res) => {
 
 app.delete("/api/cache", (req, res) => {
   res.json({ cleared: cacheClear() });
+});
+
+// Everything the volume is currently holding, so generated reports are discoverable
+// without having to remember their filenames.
+app.get("/api/files", (req, res) => {
+  const walk = (dir, rel = "") => {
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return [];
+    }
+    return entries.flatMap(e => {
+      const relPath = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) return walk(resolve(dir, e.name), relPath);
+      if (!e.name.endsWith(".html")) return [];
+      const { size, mtimeMs } = statSync(resolve(dir, e.name));
+      return [{ path: `reports/${relPath}`, name: e.name, folder: rel || "/", size, modified: mtimeMs }];
+    });
+  };
+
+  const files = walk(REPORTS_DIR).sort((a, b) => b.modified - a.modified);
+  const { entries, bytes } = cacheStats();
+  res.json({
+    dataDir: DATA_DIR,
+    onVolume: DATA_DIR !== resolve(__dirname),
+    cache: { entries, kb: Math.round(bytes / 1024) },
+    totalFiles: files.length,
+    totalKb: Math.round(files.reduce((s, f) => s + f.size, 0) / 1024),
+    files,
+  });
+});
+
+/**
+ * Delete generated reports from the volume.
+ *
+ * Resolves each path and confirms it really sits inside REPORTS_DIR before unlinking,
+ * so a crafted path (../../, an absolute path, a symlink) cannot reach anything else.
+ */
+app.delete("/api/files", (req, res) => {
+  const paths = Array.isArray(req.body?.paths) ? req.body.paths : [];
+  if (!paths.length) return res.status(400).json({ error: "No paths supplied." });
+
+  const deleted = [], rejected = [];
+  for (const p of paths) {
+    const rel = String(p).replace(/^reports\//, "");
+    const target = resolve(REPORTS_DIR, rel);
+    const inside = target.startsWith(REPORTS_DIR + "/") && target.endsWith(".html");
+    if (!inside) {
+      rejected.push({ path: p, reason: "outside the reports directory" });
+      continue;
+    }
+    try {
+      unlinkSync(target);
+      deleted.push(p);
+    } catch (err) {
+      rejected.push({ path: p, reason: err.code === "ENOENT" ? "not found" : err.message });
+    }
+  }
+  res.json({ deleted: deleted.length, rejected, deletedPaths: deleted });
 });
 
 app.post("/api/generate", async (req, res) => {
