@@ -16,6 +16,11 @@ const REGIONS = [
   },
 ];
 
+// Counties identified by a LiveBy boundary ID rather than a name need a display label.
+const COUNTY_DISPLAY_NAMES = {
+  "69a5effad74f79343900cdcd": "Western Connecticut/Gold Coast",
+};
+
 function pctChange(current, prior) {
   if (!prior || !current) return null;
   return ((current - prior) / prior) * 100;
@@ -190,4 +195,67 @@ export function aggregateQuarterlyRegions(countyResults) {
   }
 
   return regionResults;
+}
+
+/**
+ * Build one row per county from quarterly fetch results, rather than rolling
+ * counties up into regions. Emits the same row shape as aggregateQuarterlyRegions
+ * so both reports can share a generator.
+ *
+ * Median price, median DOM and sale-to-list come straight from the API per county —
+ * no cross-county aggregation, so no median-of-medians approximation.
+ *
+ * @param {object[]} countyResults - results from fetchQuarterlyData per county
+ * @returns {object[]} - array of county row objects, grouped NY -> NJ -> CT
+ */
+export function buildQuarterlyCountyRows(countyResults) {
+  const successful = countyResults.filter(r => r.current && r.prior);
+  const rows = [];
+
+  // Iterate REGIONS so counties keep their configured order and stay grouped by state.
+  for (const region of REGIONS) {
+    for (const county of region.counties) {
+      const r = successful.find(x => x.state === region.state && x.county === county);
+      if (!r) continue;
+
+      const active        = r.activeSnapshot?.count ?? 0;
+      const underContract = r.underContractCount    ?? 0;
+      const newListings   = r.newListingsCurrent    ?? 0;
+      const moi = (active && r.current.count) ? active / (r.current.count / 3) : null;
+
+      rows.push({
+        name:  COUNTY_DISPLAY_NAMES[county] ?? county,
+        state: region.state,
+        group: region.state,
+        quarter: r.quarter,
+        year:    r.year,
+        current: {
+          count:              r.current.count,
+          salesVolume:        r.current.salesVolume,
+          medianPrice:        r.current.medianSalePrice,
+          medianDaysOnMarket: r.current.medianDaysOnMarket,
+          saleToListRatio:    r.current.saleToListRatio,
+          active,
+          underContract,
+          newListings,
+          moi,
+        },
+        prior: {
+          count:              r.prior.count,
+          salesVolume:        r.prior.salesVolume,
+          medianPrice:        r.prior.medianSalePrice,
+          medianDaysOnMarket: r.prior.medianDaysOnMarket,
+          saleToListRatio:    r.prior.saleToListRatio,
+        },
+        newListingsPrior: r.newListingsPrior ?? 0,
+        change: {
+          sales:       pctChange(r.current.count,           r.prior.count),
+          medianPrice: pctChange(r.current.medianSalePrice, r.prior.medianSalePrice),
+          newListings: pctChange(r.newListingsCurrent,      r.newListingsPrior),
+        },
+      });
+    }
+  }
+
+  return rows;
 }
