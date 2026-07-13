@@ -10,6 +10,10 @@ function fmt(val, type = "number") {
   return Math.round(val).toLocaleString();
 }
 
+function pluralize(word) {
+  return /y$/i.test(word) ? word.slice(0, -1) + "ies" : word + "s";
+}
+
 function changeCell(pct) {
   if (pct == null) return `<td style="text-align:center;color:#999">—</td>`;
   const color = pct > 0 ? "#2d7a4f" : pct < 0 ? "#c0392b" : "#666";
@@ -17,14 +21,15 @@ function changeCell(pct) {
   return `<td style="text-align:center;color:${color};font-size:0.88em">${arrow} ${Math.abs(pct).toFixed(1)}%</td>`;
 }
 
-async function analyzeQuarterly(regions, quarter, year) {
+async function analyzeQuarterly(regions, quarter, year, rowLabel = "Region") {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY || config.anthropicApiKey });
   const label      = `Q${quarter} ${year}`;
   const priorLabel = `Q${quarter} ${year - 1}`;
+  const noun       = rowLabel.toLowerCase();
+  const nounPlural = pluralize(noun);
 
   const summary = regions.map(r => `
-${r.name} (${r.state}):
-- Counties/Regions: ${r.counties.join(", ")}
+${r.name} (${r.state}):${r.counties ? `\n- Counties/Regions: ${r.counties.join(", ")}` : ""}
 - Homes Sold ${label}: ${r.current.count ?? "N/A"} (vs ${r.prior.count ?? "N/A"} in ${priorLabel}, ${r.change.sales != null ? r.change.sales.toFixed(1) + "% YoY" : "N/A"})
 - Median Sale Price ${label}: ${r.current.medianPrice ? "$" + Math.round(r.current.medianPrice).toLocaleString() : "N/A"} (vs ${r.prior.medianPrice ? "$" + Math.round(r.prior.medianPrice).toLocaleString() : "N/A"} in ${priorLabel})
 - Active Listings: ${r.current.active ?? "N/A"}
@@ -35,16 +40,17 @@ ${r.name} (${r.state}):
 - Sale-to-List Ratio: ${r.current.saleToListRatio != null ? (r.current.saleToListRatio * 100).toFixed(1) + "%" : "N/A"}
 `.trim()).join("\n\n");
 
-  const prompt = `You are writing the "Regional Market Analysis" page of a quarterly real estate report produced by Howard Hanna Rand Realty for ${label}. This page provides an executive overview comparing single-family home market conditions across the regions we serve. All data reflects single-family residential properties only and covers the full ${label} quarter (three months of closed sales). Make the quarterly scope clear early in the narrative.
+  const prompt = `You are writing the "${rowLabel} Market Analysis" page of a quarterly real estate report produced by Howard Hanna Rand Realty for ${label}. This page provides an executive overview comparing single-family home market conditions across the ${nounPlural} we serve. All data reflects single-family residential properties only and covers the full ${label} quarter (three months of closed sales). Make the quarterly scope clear early in the narrative.
 
-Here is the aggregated regional data comparing ${label} to ${priorLabel}:
+Here is the ${noun}-level data comparing ${label} to ${priorLabel}:
 
 ${summary}
 
 Write 2–3 paragraphs of quarterly market commentary for a real estate professional or sophisticated consumer audience.
 
 Guidelines:
-- Compare and contrast the regions — highlight which areas are stronger or weaker and why
+- Compare and contrast the ${nounPlural} — highlight which areas are stronger or weaker and why
+- Do not attempt to mention every ${noun}; focus on the most notable standouts and outliers
 - Weave in the specific numbers naturally rather than listing them
 - Give context for what inventory, price trends, and sales pace mean for buyers and sellers
 - You may reference broader regional or national housing market trends using your knowledge
@@ -64,22 +70,47 @@ Guidelines:
     .trim();
 }
 
-export async function generateQuarterlyRegionalReport(regions, { quarter, year }) {
+export async function generateQuarterlyRegionalReport(regions, {
+  quarter,
+  year,
+  rowLabel = "Region",
+  title = "Quarterly Regional Overview",
+  analysisTitle = "Quarterly Regional Analysis",
+  // "single" puts all four tables on one page; "paged" gives each its own page.
+  layout = "single",
+} = {}) {
   const { branding } = config;
   const label      = `Q${quarter} ${year}`;
   const priorLabel = `Q${quarter} ${year - 1}`;
 
-  const analysis = await analyzeQuarterly(regions, quarter, year);
+  const analysis = await analyzeQuarterly(regions, quarter, year, rowLabel);
 
   const tableHeader = `
     <thead>
       <tr>
-        <th style="text-align:left;padding:7px 10px">Region</th>
+        <th style="text-align:left;padding:7px 10px">${rowLabel}</th>
         <th style="padding:7px 10px">${label}</th>
         <th style="padding:7px 10px">${priorLabel}</th>
         <th style="padding:7px 10px">YoY Change</th>
       </tr>
     </thead>`;
+
+  // Rows carrying a `group` get a subheading whenever the group changes.
+  // Region rows have no `group`, so their output is unaffected.
+  function withGroupHeadings(rows, colspan, renderRow) {
+    let lastGroup = null;
+    return rows.map(r => {
+      let heading = "";
+      if (r.group && r.group !== lastGroup) {
+        lastGroup = r.group;
+        heading = `
+    <tr class="group-row">
+      <td colspan="${colspan}" style="padding:6px 10px">${r.group}</td>
+    </tr>`;
+      }
+      return heading + renderRow(r);
+    }).join("");
+  }
 
   function tableRow(r, field, formatType, changeKey) {
     return `
@@ -93,19 +124,111 @@ export async function generateQuarterlyRegionalReport(regions, { quarter, year }
 
   const footer = `
     <div style="display:flex;justify-content:space-between;align-items:flex-end;border-top:2px solid ${branding.primaryColor};padding-top:10px;margin-top:20px;font-size:0.85em">
-      <div style="color:#555">Quarterly Regional Overview &bull; ${label}</div>
+      <div style="color:#555">${title} &bull; ${label}</div>
       <div style="font-family:'Playfair Display',serif;font-size:1.15em;color:${branding.primaryColor};font-weight:700">
         ${branding.company} <span style="color:${branding.accentColor}">|</span> ${branding.division}
       </div>
     </div>
     <div style="font-size:0.7em;color:#888;margin-top:6px">Data is sourced from multiple MLS services across NY, NJ, and CT. Duplications and omissions may be present. Single-family residences only. Information is deemed reliable but not guaranteed.</div>`;
 
+  const tables = [
+    {
+      title: "Sales",
+      html: `<table>
+    ${tableHeader}
+    <tbody>${withGroupHeadings(regions, 4, r => tableRow(r, "count", "number", "sales"))}</tbody>
+  </table>`,
+    },
+    {
+      title: "Median Sale Prices",
+      html: `<table>
+    ${tableHeader}
+    <tbody>${withGroupHeadings(regions, 4, r => tableRow(r, "medianPrice", "currency", "medianPrice"))}</tbody>
+  </table>`,
+    },
+    {
+      title: "Pending &amp; Inventory",
+      html: `<table>
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:7px 10px">${rowLabel}</th>
+        <th style="padding:7px 10px">Active Listings</th>
+        <th style="padding:7px 10px">Under Contract</th>
+        <th style="padding:7px 10px">Months of Inventory</th>
+        <th style="padding:7px 10px">New Listings ${label}</th>
+        <th style="padding:7px 10px">New Listings ${priorLabel}</th>
+        <th style="padding:7px 10px">Change</th>
+      </tr>
+    </thead>
+    <tbody>${withGroupHeadings(regions, 7, r => `
+    <tr>
+      <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
+      <td style="text-align:center;padding:7px 10px">${fmt(r.current.active)}</td>
+      <td style="text-align:center;padding:7px 10px">${fmt(r.current.underContract)}</td>
+      <td style="text-align:center;padding:7px 10px">${r.current.moi != null ? r.current.moi.toFixed(1) : "—"}</td>
+      <td style="text-align:center;padding:7px 10px">${fmt(r.current.newListings)}</td>
+      <td style="text-align:center;padding:7px 10px">${fmt(r.newListingsPrior)}</td>
+      ${changeCell(r.change.newListings)}
+    </tr>`)}</tbody>
+  </table>`,
+    },
+    {
+      title: "Market Conditions",
+      html: `<table>
+    <thead>
+      <tr>
+        <th style="text-align:left;padding:7px 10px">${rowLabel}</th>
+        <th style="padding:7px 10px">Median Days on Market</th>
+        <th style="padding:7px 10px">Sale-to-List Ratio</th>
+      </tr>
+    </thead>
+    <tbody>${withGroupHeadings(regions, 3, r => `
+    <tr>
+      <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
+      <td style="text-align:center;padding:7px 10px">${r.current.medianDaysOnMarket != null ? Math.round(r.current.medianDaysOnMarket) : "—"}</td>
+      <td style="text-align:center;padding:7px 10px">${r.current.saleToListRatio != null ? (r.current.saleToListRatio * 100).toFixed(1) + "%" : "—"}</td>
+    </tr>`)}</tbody>
+  </table>`,
+    },
+  ];
+
+  const pageHeader = `
+  <div class="page-header">
+    <div class="header-title">${title}</div>
+    <div class="header-sub">${label} Market Update &bull; Single-Family Residences &bull; Howard Hanna Rand Realty</div>
+  </div>`;
+
+  // Listing every name is fine for 3 regions but unreadable for 21 counties.
+  const subtitleScope = regions.length > 6
+    ? `${regions.length} ${pluralize(rowLabel.toLowerCase())} across ${[...new Set(regions.map(r => r.state))].join(", ")}`
+    : regions.map(r => r.name).join(" &bull; ");
+
+  const dataPages = layout === "paged"
+    ? tables.map(t => `
+<div class="page">${pageHeader}
+
+  <div class="section-title">${t.title}</div>
+  ${t.html}
+
+  <div class="spacer"></div>
+  ${footer}
+</div>`).join("\n")
+    : `
+<div class="page">${pageHeader}
+${tables.map(t => `
+  <div class="section-title">${t.title}</div>
+  ${t.html}
+`).join("")}
+  <div class="spacer"></div>
+  ${footer}
+</div>`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Quarterly Regional Overview — ${label}</title>
+  <title>${title} — ${label}</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Source+Sans+3:wght@300;400;600;700&display=swap" rel="stylesheet">
@@ -123,9 +246,12 @@ export async function generateQuarterlyRegionalReport(regions, { quarter, year }
     tbody tr:nth-child(even) { background: #f5f7f5; }
     tbody tr:nth-child(odd) { background: #fff; }
     tbody td { border-bottom: 1px solid #e0e5e0; }
+    tbody tr.group-row td { background: #e8ede9; color: ${branding.primaryColor}; font-family: "Playfair Display", serif; font-weight: 700; font-size: 0.9em; letter-spacing: 0.03em; text-transform: uppercase; border-bottom: 1px solid #cdd6cf; }
     .spacer { flex: 1; }
     .analysis-body p { font-size: 0.97em; line-height: 1.75; color: #2a2a2a; margin-bottom: 18px; }
     .analysis-body p:last-child { margin-bottom: 0; }
+    /* County commentary covers 21 markets and runs longer — tighten so it still fits one page. */
+    .analysis-body.dense p { font-size: 0.92em; line-height: 1.6; margin-bottom: 14px; }
     .pdf-bar { position: sticky; top: 0; z-index: 100; background: ${branding.primaryColor}; display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
     .pdf-bar-title { font-family: "Playfair Display", serif; font-size: 14px; color: rgba(255,255,255,0.85); }
     .pdf-btn { display: inline-flex; align-items: center; gap: 8px; background: ${branding.accentColor}; color: white; border: none; border-radius: 4px; padding: 8px 20px; font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -135,92 +261,26 @@ export async function generateQuarterlyRegionalReport(regions, { quarter, year }
 <body>
 
 <div class="pdf-bar">
-  <span class="pdf-bar-title">Quarterly Regional Overview &mdash; ${label}</span>
+  <span class="pdf-bar-title">${title} &mdash; ${label}</span>
   <button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 </div>
 
-<!-- PAGE 1: Data Tables -->
+<!-- DATA TABLES -->
+${dataPages}
+
+<!-- FINAL PAGE: Quarterly Analysis -->
 <div class="page">
   <div class="page-header">
-    <div class="header-title">Quarterly Regional Overview</div>
-    <div class="header-sub">${label} Market Update &bull; Single-Family Residences &bull; Howard Hanna Rand Realty</div>
-  </div>
-
-  <div class="section-title">Sales</div>
-  <table>
-    ${tableHeader}
-    <tbody>${regions.map(r => tableRow(r, "count", "number", "sales")).join("")}</tbody>
-  </table>
-
-  <div class="section-title">Median Sale Prices</div>
-  <table>
-    ${tableHeader}
-    <tbody>${regions.map(r => tableRow(r, "medianPrice", "currency", "medianPrice")).join("")}</tbody>
-  </table>
-
-  <div class="section-title">Pending &amp; Inventory</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left;padding:7px 10px">Region</th>
-        <th style="padding:7px 10px">Active Listings</th>
-        <th style="padding:7px 10px">Under Contract</th>
-        <th style="padding:7px 10px">Months of Inventory</th>
-        <th style="padding:7px 10px">New Listings ${label}</th>
-        <th style="padding:7px 10px">New Listings ${priorLabel}</th>
-        <th style="padding:7px 10px">Change</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${regions.map(r => `
-        <tr>
-          <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
-          <td style="text-align:center;padding:7px 10px">${fmt(r.current.active)}</td>
-          <td style="text-align:center;padding:7px 10px">${fmt(r.current.underContract)}</td>
-          <td style="text-align:center;padding:7px 10px">${r.current.moi != null ? r.current.moi.toFixed(1) : "—"}</td>
-          <td style="text-align:center;padding:7px 10px">${fmt(r.current.newListings)}</td>
-          <td style="text-align:center;padding:7px 10px">${fmt(r.newListingsPrior)}</td>
-          ${changeCell(r.change.newListings)}
-        </tr>`).join("")}
-    </tbody>
-  </table>
-
-  <div class="section-title">Market Conditions</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="text-align:left;padding:7px 10px">Region</th>
-        <th style="padding:7px 10px">Median Days on Market</th>
-        <th style="padding:7px 10px">Sale-to-List Ratio</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${regions.map(r => `
-        <tr>
-          <td style="font-weight:600;color:#333;padding:7px 10px">${r.name}</td>
-          <td style="text-align:center;padding:7px 10px">${r.current.medianDaysOnMarket != null ? Math.round(r.current.medianDaysOnMarket) : "—"}</td>
-          <td style="text-align:center;padding:7px 10px">${r.current.saleToListRatio != null ? (r.current.saleToListRatio * 100).toFixed(1) + "%" : "—"}</td>
-        </tr>`).join("")}
-    </tbody>
-  </table>
-
-  <div class="spacer"></div>
-  ${footer}
-</div>
-
-<!-- PAGE 2: Quarterly Analysis -->
-<div class="page">
-  <div class="page-header">
-    <div class="header-title">Quarterly Regional Analysis</div>
+    <div class="header-title">${analysisTitle}</div>
     <div class="header-sub">${label} &bull; Prepared for Howard Hanna Rand Realty</div>
   </div>
 
   <div class="section-title">Market Commentary</div>
   <div style="font-size:0.8em;color:#888;margin-bottom:20px;font-style:italic">
-    ${regions.map(r => r.name).join(" &bull; ")} &bull; ${label} vs ${priorLabel}
+    ${subtitleScope} &bull; ${label} vs ${priorLabel}
   </div>
 
-  <div class="analysis-body">
+  <div class="analysis-body${layout === "paged" ? " dense" : ""}">
     ${analysis.split(/\n\n+/).filter(p => p.trim()).map(p => `<p>${p.trim()}</p>`).join("\n    ")}
   </div>
 

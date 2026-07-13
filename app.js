@@ -10,7 +10,7 @@ import { generateScripts } from "./src/generateScripts.js";
 import { analyzeMarket } from "./src/analyzeMarket.js";
 import { runBatch } from "./src/batchRunner.js";
 import { BATCH_NY, BATCH_NJ, BATCH_CT } from "./src/batchConfig.js";
-import { aggregateRegions, aggregateQuarterlyRegions } from "./src/regionalData.js";
+import { aggregateRegions, aggregateQuarterlyRegions, buildQuarterlyCountyRows } from "./src/regionalData.js";
 import { fetchQuarterlyData, previousQuarter } from "./src/fetchQuarterlyData.js";
 import { generateQuarterlyRegionalReport } from "./src/generateQuarterlyRegionalReport.js";
 import { generateRegionalReport } from "./src/generateRegionalReport.js";
@@ -253,6 +253,67 @@ app.post("/api/quarterly-overview", async (req, res) => {
     send("done", { path: `reports/${filename}`, quarter, year, succeeded: valid.length, failed });
   } catch (err) {
     console.error("Quarterly overview error:", err);
+    send("error", { message: err.message });
+  } finally {
+    clearInterval(keepalive);
+    res.end();
+  }
+});
+
+app.post("/api/quarterly-county-overview", async (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+  const keepalive = setInterval(() => res.write(": ping\n\n"), 20000);
+
+  try {
+    const { quarter, year } = previousQuarter();
+
+    const allCounties = [
+      ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
+      ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
+      ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
+    ];
+
+    send("status", { message: `Fetching Q${quarter} ${year} data for ${allCounties.length} counties…` });
+
+    const results = await Promise.all(
+      allCounties.map(({ county, state }) =>
+        fetchQuarterlyData({ county, state, quarter, year, propertySubType: "SingleFamilyResidence" })
+          .catch(err => {
+            console.error(`Failed quarterly fetch for ${county}, ${state}: ${err.message}`);
+            return null;
+          })
+      )
+    );
+
+    const valid = results.filter(Boolean);
+    const failed = results.length - valid.length;
+    if (failed) console.warn(`Quarterly county overview: ${failed} counties failed`);
+
+    send("status", { message: "Building county rows and generating narrative…" });
+    const rows = buildQuarterlyCountyRows(valid);
+    if (!rows.length) throw new Error("No county data could be aggregated.");
+
+    const html = await generateQuarterlyRegionalReport(rows, {
+      quarter,
+      year,
+      rowLabel: "County",
+      title: "Quarterly County Overview",
+      analysisTitle: "Quarterly County Analysis",
+      layout: "paged",
+    });
+
+    const filename = `Quarterly-County-Overview-Q${quarter}-${year}.html`;
+    const outputDir = resolve(__dirname, "reports");
+    mkdirSync(outputDir, { recursive: true });
+    writeFileSync(resolve(outputDir, filename), html, "utf-8");
+
+    send("done", { path: `reports/${filename}`, quarter, year, counties: rows.length, succeeded: valid.length, failed });
+  } catch (err) {
+    console.error("Quarterly county overview error:", err);
     send("error", { message: err.message });
   } finally {
     clearInterval(keepalive);
