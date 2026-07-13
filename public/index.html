@@ -983,7 +983,11 @@
   });
 
   function renderBatchResults(event) {
-    const { results, regionalPath, indexPath, month, year } = event;
+    const { results, regionalPath, indexPath, month, year, quarter, period } = event;
+    // Quarterly batches write "...-Q2-2026.html"; the combined view has to be asked for
+    // the quarter, not the month, or it finds no files.
+    const isQuarter = period === "quarter";
+    const periodLabel = isQuarter ? `Q${quarter} ${year}` : `${MONTH_NAMES[month - 1]} ${year}`;
     const monthName = MONTH_NAMES[month - 1];
 
     // Group by state → county
@@ -1000,18 +1004,20 @@
     let html = "";
 
     if (indexPath) {
-      html += `<a href="/${indexPath}" target="_blank" class="index-link">View Full Report Index — ${monthName} ${year} ↗</a>`;
+      html += `<a href="/${indexPath}" target="_blank" class="index-link">View Full Report Index — ${periodLabel} ↗</a>`;
     }
 
     if (regionalPath) {
-      html += `<a href="/${regionalPath}" target="_blank" class="regional-link">Regional Overview — ${monthName} ${year} ↗</a>`;
+      html += `<a href="/${regionalPath}" target="_blank" class="regional-link">${isQuarter ? "Quarterly" : "Regional"} Overview — ${periodLabel} ↗</a>`;
     }
 
     const pad = n => String(n).padStart(2, "0");
 
     for (const [state, counties] of Object.entries(byState)) {
       const stateKey = state.replace(/\s+/g, "");
-      const combinedUrl = `/reports/combined/${stateKey}?month=${pad(month)}&year=${year}`;
+      const combinedUrl = isQuarter
+        ? `/reports/combined/${stateKey}?quarter=${quarter}&year=${year}`
+        : `/reports/combined/${stateKey}?month=${pad(month)}&year=${year}`;
       html += `<div class="results-group">
         <div class="results-group-label" style="display:flex;align-items:center;justify-content:space-between">
           <span>${state}</span>
