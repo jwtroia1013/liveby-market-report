@@ -35,6 +35,32 @@ railway run node app.js
 | Quarterly county overview | `POST /api/quarterly-county-overview` | Same data, one line per county |
 | Market snapshot & video scripts | `POST /api/snapshot` | Snapshot plus per-metric video scripts |
 
+### The quarterly publication
+
+**Create this Quarter's Market Reports** at the top of the dashboard
+(`POST /api/quarterly-publish`) builds the four documents published each quarter:
+New York, New Jersey and Connecticut (every single-family quarterly county report,
+Market Analysis page first, behind a cover) and Tri-State (the Quarterly County
+Overview behind a cover). Covers are the images in `public/covers`. Each document
+opens ready to save as PDF.
+
+Reports already on the volume are kept, not regenerated, so the button is safe to
+press again after the commentary has been edited. Tick "Regenerate existing
+reports" to rewrite everything.
+
+### Editing the commentary
+
+The written analysis of every report in the publication can be exported as plain
+text for an analyst to edit, then applied back:
+
+```bash
+node scripts/analysis-text.js export <folder>   # one .txt per report
+node scripts/analysis-text.js apply  <folder>   # writes edited files back to the reports
+```
+
+Both talk to production unless `--url` says otherwise, and default to the previous
+quarter (`--quarter 3 --year 2026` to choose another).
+
 The footprint is 21 areas: 8 New York counties, 12 New Jersey counties, and
 Western Connecticut (a planning region, addressed by boundary ID rather than
 county name — see `src/batchConfig.js`).

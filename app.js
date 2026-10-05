@@ -1,5 +1,5 @@
 import express from "express";
-import { mkdirSync, writeFileSync, readdirSync, readFileSync, statSync, unlinkSync } from "fs";
+import { mkdirSync, writeFileSync, readdirSync, readFileSync, statSync, unlinkSync, existsSync } from "fs";
 import { resolve, dirname } from "path";
 import { fileURLToPath } from "url";
 import { fetchMarketReport, fetchMonthlyRegion } from "./src/fetchData.js";
@@ -17,6 +17,8 @@ import { generateRegionalReport } from "./src/generateRegionalReport.js";
 import { generateIndex } from "./src/generateIndex.js";
 import { DATA_DIR, cacheStats, cacheClear } from "./src/cache.js";
 import { areaSlug, areaHeading } from "./src/areas.js";
+import { COVER_CSS, coverPage } from "./src/cover.js";
+import { readAnalysis, writeAnalysis } from "./src/analysisText.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -342,6 +344,53 @@ app.post("/api/quarterly-overview", async (req, res) => {
   }
 });
 
+const countyOverviewFile = (quarter, year) => `Quarterly-County-Overview-Q${quarter}-${year}.html`;
+
+// Fetches every county for the quarter and writes the Quarterly County Overview.
+async function writeQuarterlyCountyOverview({ quarter, year, send }) {
+  const allCounties = [
+    ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
+    ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
+    ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
+  ];
+
+  send("status", { message: `Fetching Q${quarter} ${year} data for ${allCounties.length} counties…` });
+
+  const results = await Promise.all(
+    allCounties.map(({ county, state }) =>
+      fetchQuarterlyData({ county, state, quarter, year, propertySubType: "SingleFamilyResidence" })
+        .catch(err => {
+          console.error(`Failed quarterly fetch for ${county}, ${state}: ${err.message}`);
+          return null;
+        })
+    )
+  );
+
+  const valid = results.filter(Boolean);
+  const failed = results.length - valid.length;
+  if (failed) console.warn(`Quarterly county overview: ${failed} counties failed`);
+
+  send("status", { message: "Building county rows and generating narrative…" });
+  const rows = buildQuarterlyCountyRows(valid);
+  if (!rows.length) throw new Error("No county data could be aggregated.");
+
+  const html = await generateQuarterlyRegionalReport(rows, {
+    quarter,
+    year,
+    rowLabel: "County",
+    title: "Quarterly County Overview",
+    analysisTitle: "Quarterly County Analysis",
+    layout: "paged",
+    analysisFirst: true,
+  });
+
+  const filename = countyOverviewFile(quarter, year);
+  mkdirSync(REPORTS_DIR, { recursive: true });
+  writeFileSync(resolve(REPORTS_DIR, filename), html, "utf-8");
+
+  return { path: `reports/${filename}`, counties: rows.length, succeeded: valid.length, failed };
+}
+
 app.post("/api/quarterly-county-overview", async (req, res) => {
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache");
@@ -352,49 +401,8 @@ app.post("/api/quarterly-county-overview", async (req, res) => {
 
   try {
     const { quarter, year } = previousQuarter();
-
-    const allCounties = [
-      ...BATCH_NY.counties.map(c => ({ county: c, state: BATCH_NY.state })),
-      ...BATCH_NJ.counties.map(c => ({ county: c, state: BATCH_NJ.state })),
-      ...BATCH_CT.counties.map(c => ({ county: c, state: BATCH_CT.state })),
-    ];
-
-    send("status", { message: `Fetching Q${quarter} ${year} data for ${allCounties.length} counties…` });
-
-    const results = await Promise.all(
-      allCounties.map(({ county, state }) =>
-        fetchQuarterlyData({ county, state, quarter, year, propertySubType: "SingleFamilyResidence" })
-          .catch(err => {
-            console.error(`Failed quarterly fetch for ${county}, ${state}: ${err.message}`);
-            return null;
-          })
-      )
-    );
-
-    const valid = results.filter(Boolean);
-    const failed = results.length - valid.length;
-    if (failed) console.warn(`Quarterly county overview: ${failed} counties failed`);
-
-    send("status", { message: "Building county rows and generating narrative…" });
-    const rows = buildQuarterlyCountyRows(valid);
-    if (!rows.length) throw new Error("No county data could be aggregated.");
-
-    const html = await generateQuarterlyRegionalReport(rows, {
-      quarter,
-      year,
-      rowLabel: "County",
-      title: "Quarterly County Overview",
-      analysisTitle: "Quarterly County Analysis",
-      layout: "paged",
-      analysisFirst: true,
-    });
-
-    const filename = `Quarterly-County-Overview-Q${quarter}-${year}.html`;
-    const outputDir = REPORTS_DIR;
-    mkdirSync(outputDir, { recursive: true });
-    writeFileSync(resolve(outputDir, filename), html, "utf-8");
-
-    send("done", { path: `reports/${filename}`, quarter, year, counties: rows.length, succeeded: valid.length, failed });
+    const result = await writeQuarterlyCountyOverview({ quarter, year, send });
+    send("done", { ...result, quarter, year });
   } catch (err) {
     console.error("Quarterly county overview error:", err);
     send("error", { message: err.message });
@@ -404,12 +412,21 @@ app.post("/api/quarterly-county-overview", async (req, res) => {
   }
 });
 
+// The published documents lead each county with its Market Analysis page. Reports
+// generated before that became the default have it third, so move it up when combining.
+function analysisPageFirst(body) {
+  const parts = body.split(/(?=<div class="page(?: [^"]*)?">)/);
+  const i = parts.findIndex(p => p.startsWith('<div class="page analysis-page">'));
+  if (i <= 1) return body;
+  return [parts[0], parts[i], ...parts.slice(1, i), ...parts.slice(i + 1)].join("");
+}
+
 const STATE_DISPLAY = { NewYork: "New York", NewJersey: "New Jersey", Connecticut: "Connecticut" };
 const MONTH_NAMES_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
 app.get("/reports/combined/:state", (req, res) => {
   const { state } = req.params;
-  const { month, year, quarter } = req.query;
+  const { month, year, quarter, type } = req.query;
 
   // Quarterly reports are named "...-Q2-2026.html", monthly ones "...-06-2026.html".
   const periodSlug = quarter ? `Q${quarter}` : month;
@@ -420,6 +437,7 @@ app.get("/reports/combined/:state", (req, res) => {
     files = readdirSync(dir)
       .filter(f => f.endsWith(".html"))
       .filter(f => (periodSlug && year) ? f.includes(`-${periodSlug}-${year}.html`) : true)
+      .filter(f => type ? f.includes(`-${type}-`) : true)
       .sort();
   } catch {
     return res.status(404).send("<h2>No reports found for this state.</h2>");
@@ -447,7 +465,7 @@ app.get("/reports/combined/:state", (req, res) => {
     const m = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
     if (m) {
       // Strip individual pdf-bar (no nested divs inside it, so first </div> closes it)
-      bodyParts.push(m[1].replace(/<div class="pdf-bar">[\s\S]*?<\/div>/, ""));
+      bodyParts.push(analysisPageFirst(m[1].replace(/<div class="pdf-bar">[\s\S]*?<\/div>/, "")));
     }
   }
 
@@ -460,7 +478,7 @@ app.get("/reports/combined/:state", (req, res) => {
   <title>${stateName} — ${monthName} ${reportYear} Combined Reports</title>
   ${sharedHead}
   <style>
-    .pdf-bar { display: none !important; }
+    .pdf-bar { display: none !important; }${COVER_CSS}
     .combined-bar { position: sticky; top: 0; z-index: 200; background: #1a4a3a; display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.2); }
     .combined-bar span { font-family: "Playfair Display", serif; font-size: 14px; color: rgba(255,255,255,0.85); }
     .combined-bar button { display: inline-flex; align-items: center; gap: 8px; background: #c8963e; color: white; border: none; border-radius: 4px; padding: 8px 20px; font-family: "Source Sans 3", sans-serif; font-size: 13px; font-weight: 700; cursor: pointer; }
@@ -472,9 +490,134 @@ app.get("/reports/combined/:state", (req, res) => {
     <span>${stateName} &mdash; ${monthName} ${reportYear} Market Reports &bull; ${files.length} reports</span>
     <button onclick="window.print()">⬇ Save as PDF</button>
   </div>
+  ${coverPage(state)}
   ${bodyParts.join("\n")}
 </body>
 </html>`);
+});
+
+// The Tri-State document: the Quarterly County Overview behind its cover.
+app.get("/reports/tri-state", (req, res) => {
+  const { quarter, year } = req.query;
+  let html;
+  try {
+    html = readFileSync(resolve(REPORTS_DIR, countyOverviewFile(parseInt(quarter), parseInt(year))), "utf-8");
+  } catch {
+    return res.status(404).send("<h2>No Quarterly County Overview found for that quarter.</h2>");
+  }
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+  res.send(html
+    .replace("</style>", `${COVER_CSS}\n  </style>`)
+    .replace(/(<div class="pdf-bar">[\s\S]*?<\/div>)/, `$1\n${coverPage("TriState")}`));
+});
+
+// ── One-click quarterly publication ──
+// The four documents published each quarter: New York, New Jersey and Connecticut (every
+// single-family county report behind a cover) and Tri-State (the county overview).
+const PUBLISH_STATES = [BATCH_NY, BATCH_NJ, BATCH_CT];
+const stateKey = state => state.replace(/\s+/g, "");
+
+function quarterlyDocuments(quarter, year) {
+  return [
+    ...PUBLISH_STATES.map(({ state }) => ({
+      label: `${state} — Q${quarter} ${year}`,
+      url: `/reports/combined/${stateKey(state)}?quarter=${quarter}&year=${year}&type=SingleFamily`,
+    })),
+    { label: `Tri-State — Q${quarter} ${year}`, url: `/reports/tri-state?quarter=${quarter}&year=${year}` },
+  ];
+}
+
+// Every report that feeds those documents, as paths relative to REPORTS_DIR.
+function quarterlyReportFiles(quarter, year) {
+  const suffix = `-SingleFamily-Q${quarter}-${year}.html`;
+  const files = PUBLISH_STATES.flatMap(({ state }) => {
+    try {
+      return readdirSync(resolve(REPORTS_DIR, stateKey(state)))
+        .filter(f => f.endsWith(suffix)).sort().map(f => `${stateKey(state)}/${f}`);
+    } catch {
+      return [];
+    }
+  });
+  const overview = countyOverviewFile(quarter, year);
+  return existsSync(resolve(REPORTS_DIR, overview)) ? [...files, overview] : files;
+}
+
+app.post("/api/quarterly-publish", async (req, res) => {
+  // Reports already on the volume are kept unless asked otherwise: regenerating rewrites
+  // the commentary, which would discard any edits the analyst has made.
+  const regenerate = req.body?.regenerate === true;
+
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (type, payload) => res.write(`data: ${JSON.stringify({ type, ...payload })}\n\n`);
+  const keepalive = setInterval(() => res.write(": ping\n\n"), 20000);
+
+  try {
+    const { quarter, year } = previousQuarter();
+
+    const results = await runBatch({
+      states: PUBLISH_STATES.map(b => b.state),
+      period: "quarter",
+      propertyTypes: ["SingleFamilyResidence"],
+      skipExisting: !regenerate,
+      onProgress: ({ current, total, county, state }) => {
+        send("progress", { current, total, message: `County report ${current} of ${total}: ${areaHeading(county)}, ${state}` });
+      },
+    });
+
+    let overviewKept = false;
+    if (!regenerate && existsSync(resolve(REPORTS_DIR, countyOverviewFile(quarter, year)))) {
+      overviewKept = true;
+    } else {
+      await writeQuarterlyCountyOverview({ quarter, year, send });
+    }
+
+    const failed = results.filter(r => r.status === "error");
+    send("done", {
+      quarter, year,
+      documents: quarterlyDocuments(quarter, year),
+      generated: results.filter(r => r.status === "success" && !r.skipped).length + (overviewKept ? 0 : 1),
+      kept: results.filter(r => r.skipped).length + (overviewKept ? 1 : 0),
+      failed: failed.map(r => `${areaHeading(r.county)}, ${r.state}: ${r.error}`),
+    });
+  } catch (err) {
+    console.error("Quarterly publish error:", err);
+    send("error", { message: err.message });
+  } finally {
+    clearInterval(keepalive);
+    res.end();
+  }
+});
+
+// ── Analysis text ──
+// The commentary of every report in a quarter's publication, as plain text an analyst
+// can edit, and a way to put the edited text back.
+app.get("/api/analysis-text", (req, res) => {
+  const fallback = previousQuarter();
+  const quarter = parseInt(req.query.quarter) || fallback.quarter;
+  const year = parseInt(req.query.year) || fallback.year;
+
+  const files = quarterlyReportFiles(quarter, year).flatMap(report => {
+    const text = readAnalysis(readFileSync(resolve(REPORTS_DIR, report), "utf-8"));
+    return text == null ? [] : [{ report, text }];
+  });
+  res.json({ quarter, year, files });
+});
+
+app.put("/api/analysis-text", (req, res) => {
+  const { report, text } = req.body ?? {};
+  const target = resolve(REPORTS_DIR, String(report));
+  if (!target.startsWith(REPORTS_DIR + "/") || !target.endsWith(".html")) {
+    return res.status(400).json({ error: "Not a report path." });
+  }
+  try {
+    writeFileSync(target, writeAnalysis(readFileSync(target, "utf-8"), text), "utf-8");
+    res.json({ updated: report });
+  } catch (err) {
+    res.status(err.code === "ENOENT" ? 404 : 400).json({ error: err.code === "ENOENT" ? "Report not found." : err.message });
+  }
 });
 
 app.post("/api/snapshot", async (req, res) => {

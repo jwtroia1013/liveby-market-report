@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { fetchMarketReport } from "./fetchData.js";
 import { analyzeMarket } from "./analyzeMarket.js";
@@ -62,13 +62,16 @@ function stateDir(state) {
 
 // Reports are written under DATA_DIR (the Railway volume in production) — the same place
 // the server serves /reports from. Writing under the repo would 404 in production.
-function saveReport(html, { county, state, propertyType, periodSlug }) {
-  const slug = propertyTypeSlug(propertyType);
-  const filename = `${areaSlug(county)}-${slug}-${periodSlug}.html`;
-  const dir = resolve(DATA_DIR, "reports", stateDir(state));
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(resolve(dir, filename), html, "utf-8");
-  return `reports/${stateDir(state)}/${filename}`;
+function reportPath({ county, state, propertyType, periodSlug }) {
+  return `reports/${stateDir(state)}/${areaSlug(county)}-${propertyTypeSlug(propertyType)}-${periodSlug}.html`;
+}
+
+function saveReport(html, report) {
+  const path = reportPath(report);
+  const file = resolve(DATA_DIR, path);
+  mkdirSync(resolve(file, ".."), { recursive: true });
+  writeFileSync(file, html, "utf-8");
+  return path;
 }
 
 /**
@@ -78,10 +81,12 @@ function saveReport(html, { county, state, propertyType, periodSlug }) {
  * @param {string[]} options.states  - e.g. ["New York"] or ["New York", "New Jersey"]
  * @param {string}  options.period   - "month" (default) or "quarter"
  * @param {object}  options.agent    - { name, email, website } for the report footer
+ * @param {boolean} options.skipExisting - leave reports already on disk alone, so commentary
+ *                                         an analyst has edited is not regenerated over
  * @param {function} options.onProgress - callback({ current, total, county, state, propertyType })
  * @returns {Promise<object[]>} - array of result objects with status/path/error per report
  */
-export async function runBatch({ states, propertyTypes = null, agent = {}, onProgress, collectData = false, period = "month" } = {}) {
+export async function runBatch({ states, propertyTypes = null, agent = {}, onProgress, collectData = false, period = "month", skipExisting = false } = {}) {
   const isQuarter = period === "quarter";
   const { month, year } = isQuarter ? { month: undefined, year: lastCompletedQuarter().year } : lastCompletedMonth();
   const quarter = isQuarter ? lastCompletedQuarter().quarter : undefined;
@@ -98,6 +103,13 @@ export async function runBatch({ states, propertyTypes = null, agent = {}, onPro
     const { county, state, propertyType } = configs[i];
 
     onProgress?.({ current: i + 1, total, county, state, propertyType });
+
+    const existing = reportPath({ county, state, propertyType, periodSlug });
+    if (skipExisting && existsSync(resolve(DATA_DIR, existing))) {
+      console.log(`[${i + 1}/${total}] Kept existing: ${existing}`);
+      results.push({ county, state, propertyType, month, year, quarter, period, status: "success", skipped: true, path: existing });
+      continue;
+    }
 
     try {
       console.log(`[${i + 1}/${total}] Fetching: ${county}, ${state} — ${propertyType}`);

@@ -699,7 +699,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
 
     .page-break { page-break-after: always; }
 
-    /* --- Page 3: Market Analysis --- */
+    /* --- Page 1: Market Analysis --- */
     .analysis-page .section-title {
       font-size: 1.4em;
       margin-top: 0;
@@ -741,7 +741,28 @@ export function generateReport(data, analysis = null, agentOverride = null) {
   <button class="pdf-btn" onclick="window.print()">⬇ Download PDF</button>
 </div>
 
-<!-- PAGE 1 -->
+<!-- PAGE 1: MARKET ANALYSIS -->
+<div class="page analysis-page">
+  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
+
+  <div class="section-title">Market Analysis</div>
+  <div class="analysis-meta">
+    ${countyHeading}, ${state} &nbsp;&bull;&nbsp; ${periodLabel} &nbsp;&bull;&nbsp;
+    Prepared for homeowners and prospective buyers
+  </div>
+
+  <div class="analysis-body">
+    ${analysis
+      ? analysis.split(/\n\n+/).filter(p => p.trim()).map(p => `<p>${p.trim()}</p>`).join("\n    ")
+      : `<p class="analysis-generating">Market analysis unavailable.</p>`
+    }
+  </div>
+
+  <div class="spacer"></div>
+  ${footer}
+</div>
+
+<!-- PAGE 2 -->
 <div class="page">
   ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
@@ -772,7 +793,7 @@ export function generateReport(data, analysis = null, agentOverride = null) {
   ${footer}
 </div>
 
-<!-- PAGE 2 -->
+<!-- PAGE 3 -->
 <div class="page">
   ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
 
@@ -807,27 +828,6 @@ export function generateReport(data, analysis = null, agentOverride = null) {
       <div class="legend-title">● Buyers Market</div>
       <p>More than 6 months of inventory. More supply than demand — favorable conditions for buyers.</p>
     </div>
-  </div>
-
-  <div class="spacer"></div>
-  ${footer}
-</div>
-
-<!-- PAGE 3: MARKET ANALYSIS -->
-<div class="page analysis-page">
-  ${pageHeader(`${periodLabel} Market Update &bull; Residential &mdash; ${subtypeLabel}`)}
-
-  <div class="section-title">Market Analysis</div>
-  <div class="analysis-meta">
-    ${countyHeading}, ${state} &nbsp;&bull;&nbsp; ${periodLabel} &nbsp;&bull;&nbsp;
-    Prepared for homeowners and prospective buyers
-  </div>
-
-  <div class="analysis-body">
-    ${analysis
-      ? analysis.split(/\n\n+/).filter(p => p.trim()).map(p => `<p>${p.trim()}</p>`).join("\n    ")
-      : `<p class="analysis-generating">Market analysis unavailable.</p>`
-    }
   </div>
 
   <div class="spacer"></div>

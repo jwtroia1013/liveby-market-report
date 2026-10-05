@@ -490,6 +490,33 @@
   </div>
 </header>
 
+<!-- ── ONE-CLICK QUARTERLY PUBLICATION ── -->
+<div class="card-batch" style="margin-top:0;margin-bottom:24px">
+  <div class="batch-title">This Quarter's Market Reports</div>
+  <p class="batch-subtitle">Builds the four published documents for <strong id="publish-period">the previous quarter</strong> — New York, New Jersey, Connecticut and Tri-State — each with its cover, ready to save as PDF. Reports already generated are kept as they are.</p>
+
+  <button class="btn" id="publish-btn">Create this Quarter's Market Reports</button>
+
+  <label class="checkbox-item" style="margin-top:14px">
+    <input type="checkbox" id="publish-regenerate">
+    <span class="check-label">Regenerate existing reports <span class="check-meta">rewrites all commentary, including analyst edits</span></span>
+  </label>
+
+  <div class="progress-wrap" id="publish-progress">
+    <div style="margin-bottom:10px">
+      <div class="status loading" style="display:flex;margin-top:0">
+        <div class="spinner"></div>
+        <span class="status-msg" id="publish-status-msg">Starting…</span>
+      </div>
+    </div>
+    <div class="progress-bar-track">
+      <div class="progress-bar-fill" id="publish-bar"></div>
+    </div>
+  </div>
+
+  <div id="publish-result" style="display:none;margin-top:18px"></div>
+</div>
+
 <div class="card">
   <div class="period-banner">
     <span class="period-icon">📅</span>
@@ -1335,6 +1362,84 @@
 
     refreshBtn.addEventListener("click", load);
     load();
+  })();
+</script>
+
+<script>
+  // ── One-click quarterly publication ──
+  (() => {
+    const btn       = document.getElementById("publish-btn");
+    const progress  = document.getElementById("publish-progress");
+    const statusMsg = document.getElementById("publish-status-msg");
+    const bar       = document.getElementById("publish-bar");
+    const resultEl  = document.getElementById("publish-result");
+
+    fetch("/api/current-period").then(r => r.json()).then(({ quarter, quarterYear }) => {
+      document.getElementById("publish-period").textContent = `Q${quarter} ${quarterYear}`;
+    }).catch(() => {});
+
+    const showResult = (html, isError) => {
+      resultEl.style.display = "block";
+      resultEl.style.color = isError ? "#c0392b" : "";
+      resultEl.innerHTML = html;
+    };
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      resultEl.style.display = "none";
+      progress.classList.add("visible");
+      bar.style.width = "0%";
+      statusMsg.textContent = "Starting…";
+
+      try {
+        const res = await fetch("/api/quarterly-publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ regenerate: document.getElementById("publish-regenerate").checked }),
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop();
+
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const event = JSON.parse(line.slice(6));
+
+            if (event.type === "progress") {
+              bar.style.width = Math.round((event.current / event.total) * 95) + "%";
+              statusMsg.textContent = event.message;
+            } else if (event.type === "status") {
+              statusMsg.textContent = event.message;
+            } else if (event.type === "done") {
+              bar.style.width = "100%";
+              const summary = `${event.generated} generated, ${event.kept} already existed and kept`;
+              const failures = event.failed.length
+                ? `<div style="color:#c0392b;font-size:13px;margin-bottom:10px"><strong>${event.failed.length} failed and are missing from the documents:</strong><br>${event.failed.join("<br>")}</div>`
+                : "";
+              showResult(
+                `<div style="font-size:13px;color:#555;margin-bottom:10px">Q${event.quarter} ${event.year} — ${summary}. Open each document and choose Save as PDF.</div>` +
+                failures +
+                event.documents.map(d => `<a href="${d.url}" target="_blank" class="regional-link">${d.label} ↗</a>`).join(""));
+            } else if (event.type === "error") {
+              throw new Error(event.message);
+            }
+          }
+        }
+      } catch (err) {
+        showResult("Error: " + err.message, true);
+      } finally {
+        progress.classList.remove("visible");
+        btn.disabled = false;
+      }
+    });
   })();
 </script>
 
